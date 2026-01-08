@@ -64,7 +64,7 @@ DROIDS = {
 }
 
 # DROID CONNECTIONS
-# - To connect to a droid the rermote must be turned off
+# - To connect to a droid the remote must be turned off
 # - The service and characteristics are used to communicate with the droid
 SERVICE_UUID = "09b600a0-3e42-41fc-b474-e9c0c8f0c801"
 
