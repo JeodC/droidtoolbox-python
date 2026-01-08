@@ -1,3 +1,9 @@
+# This file contains all the constants for droids
+
+# Favorites dict -- it's populated when starting the application
+# by reading the .names file which is in turn built in scan.py
+FAVORITES = {}
+
 # Droid signals are extensively documented
 # https://docs.google.com/spreadsheets/d/13P_GE6tNYpGvoVUTEQvA3SQzMqpZ-SoiWaTNoJoTV9Q
 
@@ -73,9 +79,6 @@ CHARACTERISTICS = {
     }
 }
 
-# Because we are using BTCTL and BlueZ, we need to split the bytes. Sending 0x222001 is not the same as sending 0x22 20 01.
-# With each LOGON command sent, a droid should return 2F 32 81 45 4B 10 01 44 44 11 11 01 00 00 00 00 on the NOTIFY characteristic.
-
 # DROID COMMAND PACKET STRUCTURE
 # Byte 1: [0x1F + Total Bytes] - Packet length header
 # Byte 2: [0x42] if Command ID is 0x0F, else [0x00] - Logic Guard
@@ -83,5 +86,23 @@ CHARACTERISTICS = {
 # Byte 4: [Data Length + 0x40] - Payload length header
 # Bytes 5-N: The actual command data/payload (Max 31 bytes)
 COMMANDS = {
-    "LOGON": "22 20 01"
+    "LOGON": [0x22, 0x20, 0x01],
+    "PAIR_A": [0x27, 0x42, 0x0F, 0x44, 0x44, 0x00, 0x1F, 0x00],
+    "PAIR_B": [0x27, 0x42, 0x0F, 0x44, 0x44, 0x00, 0x18, 0x02],
+    "AUDIO_BASE": [0x27, 0x42, 0x0f, 0x44, 0x44, 0x00]
+}
+
+AUDIO_GROUPS = {
+    0: "Generic",
+    1: "Droid Depot",
+    2: "Resistance",
+    3: "Unknown",
+    4: "Droid Detector",
+    5: "Dok-Ondar's",
+    6: "First Order",
+    7: "Activation",
+    8: "Motor / Internal",
+    9: "Empty",
+    10: "Accessory: Blaster",
+    11: "Accessory: Thruster"
 }
