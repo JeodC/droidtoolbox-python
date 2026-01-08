@@ -1,6 +1,9 @@
 # Droid Toolbox (Python)
 This python package is used to control Galaxy's Edge droids with Bluetooth LE. It's a work in progress port of [droid toolbox](https://github.com/ruthsarian/Droid-Toolbox/blob/main/Droid-Toolbox.ino) by Ruthsarian.
 
+## Dependencies
+You need bleak and dbus-fast to connect to droids. `pip download` them and unzip them to the deps folder. For convenience they are included in the repository.
+
 ## Usage
 Because Windows is more complex and because Linux is easier to work with, this python script will only run in Linux. It was tested with an AYN Thor handheld running Linux AARCH64. By using this script, the Thor becomes a portable beacon.
 
