@@ -6,7 +6,7 @@ class DroidBeacon:
         self.current_active = "None"
         self.debug_payload = ""
 
-    def send_payload(self, name, payload):
+    def _send_payload(self, name, payload):
         """Formats and broadcasts the raw hex payload."""
         raw = payload.replace("0x", "").replace(" ", "")
         mfg_id = f"0x{raw[:4]}"
@@ -26,7 +26,7 @@ class DroidBeacon:
             f"0x{RSSI_THRESHOLD['MID']:02X} "
             f"0x{BEACON_PROTOCOL['ACTIVE_FLAG']:02X} "
         )
-        self.send_payload(name, payload)
+        self._send_payload(name, payload)
 
     def activate_droid(self, p_id, p_name, faction_name):
         aff_id = FACTIONS[faction_name]
@@ -40,7 +40,7 @@ class DroidBeacon:
             f"0x{aff_byte:02X} "
             f"0x{p_id:02X}"
         )
-        self.send_payload(f"{faction_name}: {p_name}", payload)
+        self._send_payload(f"{faction_name}: {p_name}", payload)
 
     def stop(self):
         self.bt.stop_advertising()
