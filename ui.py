@@ -18,119 +18,140 @@ class DroidUI:
     def clear(self):
         os.system('clear' if os.name == 'posix' else 'cls')
 
-# --- SCANNER UI HANDLERS ---
+    def _draw_beacon_header(self):
+        """Renders the consistent beacon status top-bar"""
+        self.clear()
+        print(UI_STRINGS["BEACON_HEADER_MAIN"])
+        print(UI_STRINGS["BEACON_STATUS"].format(status=self.beacon.current_active))
+
+    def _display_list(self, items):
+        """Generic list renderer for scannable/saved droids"""
+        for index, item in enumerate(items, 1):
+            print(UI_STRINGS["LIST_ITEM"].format(
+                idx=index, 
+                label=item['label'], 
+                mac=item['mac']
+            ))
 
     def scanning_menu(self):
+        """Live scanning for BLE droids"""
         while True:
             self.clear()
-            friendly_names = self.scanner.load_names()
-            
             print(UI_STRINGS["SCAN_HEADER"])
             print(UI_STRINGS["SCAN_MSG"])
             
-            # Use self.bt directly
-            self.bt.send("scan on")
+            # Adjust to control how long to scan
+            self.bt.power_on()
+            self.bt.start_scanning()
             time.sleep(2)
-            self.bt.send("scan off")
+            self.bt.stop_scanning()
 
-            found_macs = self.scanner.get_found_macs()
+            found_macs = self.scanner.scan_for_droids()
             session_droids = []
 
             if not found_macs:
                 print(UI_STRINGS["SCAN_NONE"])
             else:
-                for index, mac in enumerate(found_macs, 1):
+                for idx, mac in enumerate(found_macs, 1):
                     mac_upper = mac.upper()
                     session_droids.append(mac_upper)
-                    
-                    nickname = friendly_names.get(mac_upper)
-                    data = self.scanner.decode_info(mac_upper)
-                    display_label = nickname if nickname else (data if data else "Unknown Droid")
-                    
-                    print(UI_STRINGS["LIST_ITEM"].format(idx=index, label=display_label, mac=mac_upper))
+                    nickname = self.scanner.get_saved_name(mac_upper)
+                    data = self.scanner.get_droid_identity(mac_upper)
+                    display_label = nickname or data or UI_STRINGS["UNKNOWN"]
+                    print(UI_STRINGS["LIST_ITEM"].format(idx=idx, label=display_label, mac=mac_upper))
 
-            print("-" * 50)
             print(UI_STRINGS["SCAN_FOOTER"])
-            
-            cmd = input(UI_STRINGS["PROMPT"]).lower().strip()
-            if not cmd or cmd == 'q': break
-            if cmd == 'r': continue
+            cmd = input(UI_STRINGS["PROMPT"]).strip().upper()
+            if not cmd or cmd == 'Q':
+                break
+            if cmd == 'R':
+                continue
 
+            # Parse user input: <action><index>
             try:
                 action = cmd[0]
                 idx = int(cmd[1:]) - 1
                 target_mac = session_droids[idx]
-
-                if action == 'c':
-                    pulse = self.scanner.decode_info(target_mac)
-                    nick = friendly_names.get(target_mac)
-                    final_name = nick if nick else (pulse if pulse else (UI_STRINGS["UNKNOWN"]))
-                    self.connection_session(target_mac, final_name)
-
-                elif action == 'n':
-                    new_name = input(UI_STRINGS["NICKNAME"].format(target_mac=target_mac)).strip()
-                    if new_name: self.scanner.save_name(target_mac, new_name)
-
-                elif action == 's':
-                    pulse = self.scanner.decode_info(target_mac)
-                    self.scanner.save_name(target_mac, pulse if pulse else (UI_STRINGS["UNKNOWN"]))
-                    print(UI_STRINGS["ADDED"])
-                    time.sleep(1)
-
-            except (IndexError, ValueError):
+            except (ValueError, IndexError):
                 print(UI_STRINGS["INVALID"])
                 time.sleep(1)
+                continue
+
+            if action == 'C':
+                identity = self.scanner.get_droid_identity(target_mac)
+                nickname = self.scanner.get_saved_name(target_mac)
+                final_name = nickname or identity or UI_STRINGS["UNKNOWN"]
+                self.connection_session(target_mac, final_name)
+
+            elif action == 'N':
+                new_name = input(UI_STRINGS["NICKNAME"].format(target_mac=target_mac)).strip()
+                if new_name:
+                    self.scanner.save_custom_name(target_mac, new_name)
 
     def favorites_menu(self):
+        """Manage and connect to saved droids"""
         while True:
             self.clear()
-            names = self.scanner.load_names()
+            saved_names = self.scanner._load_names()
             FAVORITES.clear()
             
             print(UI_STRINGS["FAVORITES_HEADER"])
-            if not names:
+            if not saved_names:
                 print(UI_STRINGS["FAVORITES_EMPTY"])
             else:
-                for index, (mac, name) in enumerate(names.items(), 1):
-                    FAVORITES[str(index)] = {"name": name, "mac": mac}
-                    print(UI_STRINGS["LIST_ITEM"].format(idx=index, label=name, mac=mac))
-            
-            print(UI_STRINGS["FAVORITES_FOOTER"])
-            user_input = input(UI_STRINGS["PROMPT"]).strip().upper()
-            
-            if user_input == 'B': break
-            if not user_input: continue
+                for idx, (mac, name) in enumerate(saved_names.items(), 1):
+                    FAVORITES[str(idx)] = {"name": name, "mac": mac}
+                    print(UI_STRINGS["LIST_ITEM"].format(idx=idx, label=name, mac=mac))
 
-            if user_input.startswith('D'):
-                idx = user_input[1:]
+            print(UI_STRINGS["FAVORITES_FOOTER"])
+            choice = input(UI_STRINGS["PROMPT"]).strip().upper()
+            if choice == 'B':
+                break
+
+            if choice.startswith('D'):
+                idx = choice[1:]
                 if idx in FAVORITES:
                     target = FAVORITES[idx]
-                    if input(UI_STRINGS["FAVORITES_DELETE"].format(name=target['name'])).lower() == 'y':
-                        current_list = self.scanner.load_names()
-                        if target['mac'] in current_list:
-                            del current_list[target['mac']]
-                            with open(self.scanner.namefile, "w") as f:
-                                for m, n in current_list.items():
-                                    f.write(f"{m}|{n}\n")
-                        print(UI_STRINGS["FAVORITES_DELCONF"].format(name=target['name']))
+                    confirm = input(UI_STRINGS["FAVORITES_DELETE"].format(name=target['name'])).strip().lower()
+                    if confirm == 'y':
+                        if self.scanner.delete_saved_name(target['mac']):
+                            print(UI_STRINGS["FAVORITES_DELCONF"].format(name=target['name']))
+                        else:
+                            print(UI_STRINGS["FAVORITES_ERROR"])
                         time.sleep(1)
-            
-            elif user_input in FAVORITES:
-                target = FAVORITES[user_input]
+                continue
+
+            if choice in FAVORITES:
+                target = FAVORITES[choice]
                 os.system(f"bluetoothctl remove {target['mac']} > /dev/null 2>&1")
                 self.connection_session(target['mac'], target['name'])
 
-# --- BEACON UI HANDLERS ---
-               
-    def beacon_header(self):
-        self.clear()
-        print(UI_STRINGS["BEACON_HEADER_MAIN"])
-        print(UI_STRINGS["BEACON_STATUS"].format(status=self.beacon.current_active))
-        #print(UI_STRINGS["BEACON_DEBUG"].format(payload=self.beacon.debug_payload))
-
-    def beacon_submenu(self, title, data_dict, is_location=False):
+    def beacon_main_menu(self):
+        """Main entry point for Bluetooth beaconing"""
         while True:
-            self.beacon_header()
+            self._draw_beacon_header()
+            print(UI_STRINGS["BEACON_MAIN_OP1"])
+            factions = list(DROIDS.keys())
+            for i, faction in enumerate(factions, start=2):
+                print(UI_STRINGS["BEACON_MAIN_OP2"].format(index=i, faction=faction))
+
+            print(UI_STRINGS["BEACON_FOOTER_MAIN"])
+            choice = input(UI_STRINGS["PROMPT"]).upper().strip()
+
+            if choice == 'Q': break
+            if choice == 'S': self.beacon.stop()
+            elif choice == '1':
+                self._beacon_submenu("LOCATIONS", LOCATIONS, is_location=True)
+            elif choice.isdigit():
+                idx = int(choice) - 2
+                if 0 <= idx < len(factions):
+                    faction = factions[idx]
+                    self._beacon_submenu(faction, DROIDS[faction])
+
+    def _beacon_submenu(self, title, data_dict, is_location=False):
+        """Renders sub-categories for beacons"""
+        while True:
+            self._draw_beacon_header()
             print(f"\n[{title}]\n")
             
             for key, val in sorted(data_dict.items()):
@@ -150,30 +171,8 @@ class DroidUI:
                 else:
                     self.beacon.activate_droid(selected['id'], selected['name'], title)
 
-    def beacon_main_menu(self):
-        while True:
-            self.beacon_header()
-            print(UI_STRINGS["BEACON_MAIN_OP1"])
-            factions = list(DROIDS.keys())
-            for i, faction in enumerate(factions, start=2):
-                print(UI_STRINGS["BEACON_MAIN_OP2"].format(index=i, faction=faction))
-
-            print(UI_STRINGS["BEACON_FOOTER_MAIN"])
-            choice = input(UI_STRINGS["PROMPT"]).upper().strip()
-
-            if choice == 'Q': break
-            if choice == 'S': self.beacon.stop()
-            elif choice == '1':
-                self.beacon_submenu("LOCATIONS", LOCATIONS, is_location=True)
-            elif choice.isdigit():
-                idx = int(choice) - 2
-                if 0 <= idx < len(factions):
-                    faction = factions[idx]
-                    self.beacon_submenu(faction, DROIDS[faction])
-                    
-# --- CONNECTION UI HANDLERS ---
-
     def connection_session(self, mac, name):
+        """Active BLE connection loop"""
         loop = asyncio.get_event_loop()
         print(UI_STRINGS["CONN_CONNECTING"].format(name=name))
         
@@ -187,10 +186,9 @@ class DroidUI:
                 print(UI_STRINGS["CONN_LOST"])
                 time.sleep(2)
                 break
-            current_names = self.scanner.load_names()
-            display_name = current_names.get(mac.upper(), name)
+
             self.clear()
-            print(UI_STRINGS["CONN_HEADER_ACTIVE"].format(name=display_name.upper()))
+            print(UI_STRINGS["CONN_HEADER_ACTIVE"].format(name=name.upper()))
             print(UI_STRINGS["CONN_STATUS_BAR"].format(mac=mac))
             print(UI_STRINGS["CONN_MAIN_MENU"])
             
@@ -199,11 +197,12 @@ class DroidUI:
                 loop.run_until_complete(self.connection.disconnect())
                 break
             elif cmd == 'A':
-                self.audio_ui_loop(loop)
+                self._audio_ui_loop(loop)
             elif cmd == 'S':
-                self.script_ui_loop(loop)
+                self._script_ui_loop(loop)
 
-    def audio_ui_loop(self, loop):
+    def _audio_ui_loop(self, loop):
+        """Interactive audio trigger menu"""
         while True:
             self.clear()
             print(UI_STRINGS["AUDIO_HEADER"])
@@ -217,7 +216,8 @@ class DroidUI:
                 g, c = map(int, match.groups())
                 loop.run_until_complete(self.connection.send_audio(g, c))
 
-    def script_ui_loop(self, loop):
+    def _script_ui_loop(self, loop):
+        """Interactive animation trigger menu"""
         while True:
             self.clear()
             print(UI_STRINGS["SCRIPT_HEADER"])

@@ -141,7 +141,7 @@ COMMANDS = {
 # - Clip 0 plays a random clip from group
 # - Clips range from 1-7
 AUDIO_GROUPS = {
-    0: "Generic",
+    0: "Random",
     1: "Droid Depot",
     2: "Resistance",
     3: "Unknown",
@@ -156,6 +156,8 @@ AUDIO_GROUPS = {
 }
 
 # UI STRINGS
+# - These will eventually be loaded from language json files
+# - Easy translation
 UI_STRINGS = {
     "LIST_ITEM": "[{idx}] {label}\n    MAC: {mac}",
     "PROMPT": "\nSelect > ",
@@ -173,6 +175,7 @@ UI_STRINGS = {
     "FAVORITES_EMPTY": "\nNo droids saved yet.",
     "FAVORITES_DELETE": "Remove {name}? (y/n): ",
     "FAVORITES_DELCONF": "[*] {name} removed.",
+    "FAVORITES_ERROR": "Error: Droid not found in favorites.",
     "FAVORITES_FOOTER": "\n[B] Back | [#] Connect | [D#] Delete",
     
     "BEACON_HEADER_MAIN": "--- DROID BEACON CONTROL ---",
