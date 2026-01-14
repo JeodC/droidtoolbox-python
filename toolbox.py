@@ -16,12 +16,21 @@ import sdl2.ext
 # Local imports
 # ----------------------------------------------------------------------
 from bluetoothctl import BluetoothCtl
-from input import Input, get_controller_layout
-from scan import DroidScanner, ScanManager
+from input import Input
+from scan import ScanManager
 from beacon import BeaconManager
 from connect import ConnectionManager
-from dicts import FAVORITES, LOCATIONS, FACTIONS, DROIDS, AUDIO_GROUPS, UI_STRINGS, UI_BUTTONS
 from ui import UserInterface
+
+from dicts import (
+    FAVORITES,
+    LOCATIONS,
+    FACTIONS,
+    DROIDS,
+    AUDIO_GROUPS,
+    UI_STRINGS,
+    UI_BUTTONS
+)
 
 # ----------------------------------------------------------------------
 # DroidToolbox class
@@ -75,43 +84,29 @@ class DroidToolbox:
         self.last_progress_time = 0.0
         self.PROGRESS_STICKY_SECONDS = 2.0
 
-        layout_raw = get_controller_layout()
+    # ----------------------------------------------------------------------
+    # Helpers
+    # ----------------------------------------------------------------------
+    def _set_buttons(self, *btn_keys):
+        self.ui.buttons_config = []
         
-        color_lookup = {
+        color_map = {
             "a": self.ui.c_btn_a,
             "b": self.ui.c_btn_b,
             "x": self.ui.c_btn_x,
             "y": self.ui.c_btn_y,
-            "l1": self.ui.c_btn_s,
-            "r1": self.ui.c_btn_s
+            "s": self.ui.c_btn_s
         }
-        
-        self.layout = {
-            k: {
-                "key": v["key"],
-                "btn": v["btn"],
-                "color": color_lookup.get(k, self.ui.c_text)
-            } 
-            for k, v in layout_raw.items()
-        }
-            
-    def _set_buttons(self, *btn_keys):
-        self.ui.buttons_config = []
+
         for key in btn_keys:
             cfg = UI_BUTTONS.get(key)
             if cfg:
-                btn_id = cfg["color"].lower()
-                layout_info = self.layout.get(btn_id, {})
-                
                 self.ui.buttons_config.append({
-                    "key": layout_info.get("btn", "?"),
+                    "key": cfg["btn"],
                     "label": cfg["label"],
-                    "color": layout_info.get("color", self.ui.c_text)
+                    "color": color_map.get(cfg["color_ref"], self.ui.c_text)
                 })
 
-    # ----------------------------------------------------------------------
-    # Helpers
-    # ----------------------------------------------------------------------
     def _load_favorites(self):
         """ Loads favorites from file and populates the FAVORITES dict """
         with self._lock:
@@ -242,10 +237,10 @@ class DroidToolbox:
     def _update_main(self):
         self.main_idx = self.input.ui_handle_navigation(self.main_idx, 1, 3)
 
-        if self.input.ui_key(self.layout["a"]["key"]):
+        if self.input.ui_key("A"):
             views = ["scan", "beacon", "connect"]
             self._change_view(views[self.main_idx])
-        elif self.input.ui_key(self.layout["b"]["key"]):
+        elif self.input.ui_key("B"):
             self.running = False
 
     # ----------------------------------------------------------------------
@@ -279,14 +274,14 @@ class DroidToolbox:
         else:
             selected = None
 
-        if self.input.ui_key(self.layout["y"]["key"]):
+        if self.input.ui_key("Y"):
             mac, name = selected["mac"], (selected.get("nickname") or "Droid")
             if mac.upper() in self.favorites:
                 self.delete_favorite(mac)
             else:
                 self.save_favorite(mac, name)
 
-        elif self.input.ui_key(self.layout["a"]["key"]):
+        elif self.input.ui_key("A"):
             self.conn_mgr.connect_droid(selected["mac"], selected.get("nickname") or "Droid")
             self._show_progress(UI_STRINGS["CONN_CONNECTING"].format(name=selected.get("nickname") or "Droid"))
 
@@ -303,7 +298,7 @@ class DroidToolbox:
 
             threading.Thread(target=_wait_for_result, daemon=True).start()
 
-        elif self.input.ui_key(self.layout["b"]["key"]):
+        elif self.input.ui_key("B"):
             self._reset_to_main()
 
     # ----------------------------------------------------------------------
@@ -329,7 +324,7 @@ class DroidToolbox:
         self._beacon_items_cache = items
 
     def _update_beacon(self):
-        if self.input.ui_key(self.layout["b"]["key"]):
+        if self.input.ui_key("B"):
             if self.beacon_selection:
                 self.beacon_selection.pop()
                 self.beacon_idx = 0
@@ -337,7 +332,7 @@ class DroidToolbox:
                 self._reset_to_main()
             return
 
-        if self.input.ui_key(self.layout["x"]["key"]):
+        if self.input.ui_key("X"):
             self.beacon_mgr.stop()
             self._show_progress("Beacon Stopped")
             return
@@ -345,7 +340,7 @@ class DroidToolbox:
         items = getattr(self, "_beacon_items_cache", [])
         self.beacon_idx = self.input.ui_handle_navigation(self.beacon_idx, 1, len(items))
 
-        if self.input.ui_key(self.layout["a"]["key"]) and items:
+        if self.input.ui_key("A") and items:
             selected = items[self.beacon_idx]
             if not self.beacon_selection:
                 self.beacon_selection.append(selected)
@@ -383,7 +378,7 @@ class DroidToolbox:
         self.ui.draw_buttons()
 
     def _update_connect(self):
-        if self.input.ui_key(self.layout["b"]["key"]):
+        if self.input.ui_key("B"):
             self._reset_to_main()
             return
 
@@ -394,10 +389,10 @@ class DroidToolbox:
         self.connect_idx = self.input.ui_handle_navigation(self.connect_idx, 1, len(fav_items))
         mac, name = fav_items[self.connect_idx]
 
-        if self.input.ui_key(self.layout["x"]["key"]):
+        if self.input.ui_key("X"):
             self.delete_favorite(mac)
             self.ui.draw_status_footer(UI_STRINGS["FAVORITES_DELCONF"])
-        elif self.input.ui_key(self.layout["a"]["key"]):
+        elif self.input.ui_key("A"):
             self.conn_mgr.connect_droid(mac, name)
 
     # ----------------------------------------------------------------------
@@ -420,10 +415,10 @@ class DroidToolbox:
     def _update_connected(self):
         self.connected_idx = self.input.ui_handle_navigation(self.connected_idx, 1, 4)
         
-        if self.input.ui_key(self.layout["b"]["key"]):
+        if self.input.ui_key("B"):
             self._handle_disconnect()
 
-        elif self.input.ui_key(self.layout["a"]["key"]):
+        elif self.input.ui_key("A"):
             choices = ["audio", "script", "remote", "disconnect"]
             choice = choices[self.connected_idx]
 
@@ -478,12 +473,12 @@ class DroidToolbox:
     def _update_audio_menu(self):
         if self.audio_group_selected is None:
             self.audio_group_idx = self.input.ui_handle_navigation(self.audio_group_idx, 1, len(AUDIO_GROUPS))
-            if self.input.ui_key(self.layout["b"]["key"]): self.submenu = None
-            elif self.input.ui_key(self.layout["a"]["key"]): self.audio_group_selected = self.audio_group_idx
+            if self.input.ui_key("B"): self.submenu = None
+            elif self.input.ui_key("A"): self.audio_group_selected = self.audio_group_idx
         else:
             self.audio_clip_idx = self.input.ui_handle_navigation(self.audio_clip_idx, 1, 8)
-            if self.input.ui_key(self.layout["b"]["key"]): self.audio_group_selected = None
-            elif self.input.ui_key(self.layout["a"]["key"]):
+            if self.input.ui_key("B"): self.audio_group_selected = None
+            elif self.input.ui_key("A"):
                 self.conn_mgr.run_action(f"G{self.audio_group_selected}C{self.audio_clip_idx}", "Audio")
 
     # ----------------------------------------------------------------------
@@ -502,8 +497,8 @@ class DroidToolbox:
 
     def _update_script_menu(self):
         self.script_idx = self.input.ui_handle_navigation(self.script_idx, 1, 18)
-        if self.input.ui_key(self.layout["b"]["key"]): self.submenu = None
-        elif self.input.ui_key(self.layout["a"]["key"]):
+        if self.input.ui_key("B"): self.submenu = None
+        elif self.input.ui_key("A"):
             self.conn_mgr.run_action(f"Script {self.script_idx + 1}", "Scripts")
 
     # ----------------------------------------------------------------------
@@ -515,7 +510,7 @@ class DroidToolbox:
         self.ui.draw_buttons()
 
     def _update_remote_menu(self):
-        if self.input.ui_key(self.layout["b"]["key"]): self.submenu = None
+        if self.input.ui_key("B"): self.submenu = None
 
     def start(self):
         threading.Thread(target=self._monitor_input, name="InputThread", daemon=True).start()

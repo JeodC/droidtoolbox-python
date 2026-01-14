@@ -6,41 +6,9 @@ input.py - Input manager for sdl gamepad
 import os
 import time
 from threading import Lock
-from typing import Any, Dict, Optional, TypedDict
+from typing import Any, Dict, Optional
 
 import sdl2
-
-# ----------------------------------------------------------------------
-# TypedDict definitions – only the fields that are actually read
-# ----------------------------------------------------------------------
-class Button(TypedDict):
-    key: str          # SDL key name (e.g. "A")
-    btn: str          # Label shown on-screen (e.g. "A")
-    color: str        # Hex colour
-
-class ButtonConfig(TypedDict):
-    a: Button
-    b: Button
-    x: Button
-    y: Button
-    l1: Button
-    r1: Button
-
-# ----------------------------------------------------------------------
-# Hard-coded layouts
-# ----------------------------------------------------------------------
-BUTTON_CONFIGS: dict[str, ButtonConfig] = {
-    "a": {"key": "A", "btn": "A", "color": "green"},
-    "b": {"key": "B", "btn": "B", "color": "red"},
-    "x": {"key": "X", "btn": "X", "color": "blue"},
-    "y": {"key": "Y", "btn": "Y", "color": "yellow"},
-    "l1": {"key": "L1", "btn": "L1", "color": "gray"},
-    "r1": {"key": "R1", "btn": "R1", "color": "gray"},
-}
-
-def get_controller_layout() -> ButtonConfig:
-    """Return the button mapping for the current layout."""
-    return BUTTON_CONFIGS
 
 # ----------------------------------------------------------------------
 # Input class

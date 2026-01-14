@@ -213,11 +213,11 @@ UI_STRINGS = {
 # BUTTON CONFIGURATIONS
 # See input.py for hardcoded color->button maps
 UI_BUTTONS = {
-    "SELECT": {"label": "Select",       "color": "a"},
-    "BACK":   {"label": "Back",         "color": "b"},
-    "STOP":   {"label": "Stop",         "color": "x"},
-    "DELETE": {"label": "Delete",       "color": "x"},
-    "FAV":    {"label": "Favorite",     "color": "y"},
-    "EXIT":   {"label": "Exit",         "color": "b"},
-    "CONN":   {"label": "Connect",      "color": "a"},
+    "SELECT": {"label": "Select",   "btn": "A",  "color_ref": "a"},
+    "BACK":   {"label": "Back",     "btn": "B",  "color_ref": "b"},
+    "STOP":   {"label": "Stop",     "btn": "X",  "color_ref": "x"},
+    "DELETE": {"label": "Delete",   "btn": "X",  "color_ref": "x"},
+    "FAV":    {"label": "Favorite", "btn": "Y",  "color_ref": "y"},
+    "EXIT":   {"label": "Exit",     "btn": "B",  "color_ref": "b"},
+    "CONN":   {"label": "Connect",  "btn": "A",  "color_ref": "a"},
 }
