@@ -494,3 +494,31 @@ class UserInterface:
 
         dst_rect = sdl2.SDL_Rect(x, y, dw, dh)
         sdl2.SDL_RenderCopyEx(self.renderer, texture, None, dst_rect, 0, None, sdl2.SDL_FLIP_NONE)
+        
+    def draw_joystick_monitor(self, pos: Tuple[int, int], radius: int, x_val: float, y_val: float, label: str):
+        self.draw_rectangle_outline(
+            (pos[0] - radius, pos[1] - radius, radius * 2, radius * 2), 
+            self.c_row_bg
+        )
+        
+        self.draw_circle(pos, radius, fill=sdl2.SDL_Color(30, 30, 30, 255))
+        knob_x = pos[0] + int(x_val * (radius - 5))
+        knob_y = pos[1] + int(y_val * (radius - 5))
+        knob_radius = radius // 3
+        self.draw_circle((knob_x, knob_y), knob_radius, fill=self.c_btn_x)
+        label_x = pos[0] - (self.get_text_width(label) // 2)
+        self.draw_text((label_x, pos[1] + radius + 5), label)
+        
+    def draw_trigger_gauge(self, pos: Tuple[int, int], size: Tuple[int, int], value: float, label: str):
+        x, y = pos
+        w, h = size
+        
+        self.draw_rectangle((x, y, w, h), fill=sdl2.SDL_Color(30, 30, 30, 255))
+        self.draw_rectangle_outline((x, y, w, h), self.c_row_bg)
+        
+        fill_h = int(h * value)
+        if fill_h > 0:
+            self.draw_rectangle((x + 1, y + h - fill_h + 1, w - 2, fill_h - 2), fill=self.c_btn_a)
+            
+        tw = self.get_text_width(label)
+        self.draw_text((x + (w // 2) - (tw // 2), y + h + 4), label)

@@ -137,6 +137,19 @@ COMMANDS = {
     "BB_STOP":         [0x2B, 0x42, 0x0F, 0x48, 0x44, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
 }
 
+# DROID CONTROLS
+# - Physical droid remotes have Fwd/Back, L/R, Head L/R, Sound, and Accessory buttons
+# - These are mimicked here, where the intent is mapped to both a button and the method that handles the backend
+# - This also allows for custom buttonn mapping
+CONTROLS = {
+    "THROTTLE":  {"btn": "LY", "method": "remote_throttle"},
+    "STEER":     {"btn": "RX", "method": "remote_steer"},
+    "HEAD":      {"btn": "RY", "method": "remote_head"},
+    "SOUND":     {"btn": "A",  "method": "remote_sound_random"},
+    "STOP":      {"btn": "X",  "method": "remote_stop"},
+    "ACCESSORY": {"btn": "R1", "method": "remote_accessory"},
+}
+
 # DROID AUDIO GROUPS
 # - Named for the park locations where the audio is typically heard naturally
 # - Audio clips are stacked sequentially within these groups
@@ -169,6 +182,13 @@ UI_STRINGS = {
     "MAIN_SCAN": "Scan for droids",
     "MAIN_BEACON": "Emit a beacon",
     "MAIN_CONNECT": "Connect to a droid",
+    "MAIN_OPTIONS": "Settings",
+    "MAIN_EXIT": "Quit Application",
+
+    "OPTIONS_HEADER": " --- SETTINGS MENU ---",
+    "OPTIONS_THEME": "Change UI theme",
+    "OPTIONS_FAVORITES": "Manage Favorites",
+    "OPTIONS_MAPPINGS": "Change gamepad profiles", 
     
     "SCAN_HEADER": "--- DROID SCANNER ---",
     "SCAN_FOOTER": "Found droids.",
@@ -176,7 +196,7 @@ UI_STRINGS = {
     "SCAN_NONE": "No Droids found",
     "SCAN_PROMPT": "Select a Droid",
     
-    "FAVORITES_HEADER": "--- KNOWN DROIDS ---",
+    "FAVORITES_HEADER": "--- FAVORITE DROIDS ---",
     "FAVORITES_EMPTY": "No droids saved yet",
     "FAVORITES_PROMPT": "Select a Favorite",
     "FAVORITES_DELCONF": "Removed from Favorites",
@@ -207,7 +227,7 @@ UI_STRINGS = {
     "SCRIPTS_FOOTER": "Select a script number (1 - 18)",
     
     "REMOTE_HEADER": "--- REMOTE CONTROL ---",
-    "REMOTE_FOOTER": "Remote controls not implemented",
+    "REMOTE_FOOTER": "",
 }
 
 # BUTTON CONFIGURATIONS

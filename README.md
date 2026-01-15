@@ -5,7 +5,7 @@ This python package is used to control Galaxy's Edge droids with Bluetooth LE. I
 You need bleak and dbus-fast to connect to droids. For convenience they are included in the repository. If you are using muOS you will need the [bltMuos](https://github.com/nvcuong1312/bltMuos/releases) application installed.
 
 ## Usage
-Run the script over ssh with `python main.py` and the script will do a brief check for bluetooth capability. You will then come to the menu where you can scan for droids, emit a beacon, or connect to a droid. When a release is prepared, a proper launchscript (`.sh` file) will be added so the application can be launched directly by the device.
+When a release is prepared, a proper launchscript (`.sh` file) will be added so the application can be launched directly by the device.
 
 ### Scanning
 In scanning mode, the script finds all bluetooth devices with the name `DROID` and checks their Manufacturer ID for the magic Disney byte. If it's a match, the script fetches info with bluetoothctl, if possible, to grab the droid's Faction and Personality. You can add a droid to your favorites list to remember it.

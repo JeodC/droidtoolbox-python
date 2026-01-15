@@ -1,0 +1,3 @@
+bleak
+dbus-fast
+PySDL2

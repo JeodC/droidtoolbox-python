@@ -37,6 +37,8 @@ class Input:
     _axis_mapping = {
         sdl2.SDL_CONTROLLER_AXIS_LEFTX: "DX",
         sdl2.SDL_CONTROLLER_AXIS_LEFTY: "DY",
+        sdl2.SDL_CONTROLLER_AXIS_RIGHTX: "RX",
+        sdl2.SDL_CONTROLLER_AXIS_RIGHTY: "RY",
         sdl2.SDL_CONTROLLER_AXIS_TRIGGERLEFT: "L2",
         sdl2.SDL_CONTROLLER_AXIS_TRIGGERRIGHT: "R2",
     }
@@ -61,8 +63,12 @@ class Input:
         self._keys_held_start_time: Dict[str, float] = {}
         self._axis_values: Dict[str, int] = {}
 
+        # Containers for smoothed values
+        self._trigger_smooth: Dict[str, float] = {"L2": 0.0, "R2": 0.0}
+        
         # UI Settings
         self._initial_delay = 0.35
+        self._smoothing_factor = 0.2
 
         # Initialize SDL Controller Subsystem
         sdl2.SDL_Init(sdl2.SDL_INIT_GAMECONTROLLER | sdl2.SDL_INIT_JOYSTICK)
@@ -141,6 +147,28 @@ class Input:
         """Returns raw analog value (-32768 to 32767) for precise steering."""
         with self._input_lock:
             return self._axis_values.get(axis_name, 0)
+            
+    def update_smoothing(self) -> None:
+        with self._input_lock:
+            for trigger in ["L2", "R2"]:
+                raw = self._axis_values.get(trigger, 0)
+                
+                lower_dz, upper_dz = 2000, 31000
+                if raw < lower_dz: 
+                    target = 0.0
+                elif raw > upper_dz: 
+                    target = 1.0
+                else: 
+                    target = (raw - lower_dz) / (upper_dz - lower_dz)
+                
+                self._trigger_smooth[trigger] += (target - self._trigger_smooth[trigger]) * self._smoothing_factor
+
+    def get_axis_float(self, axis_name: str) -> float:
+        with self._input_lock:
+            if axis_name in ["L2", "R2"]:
+                return self._trigger_smooth.get(axis_name, 0.0)
+            
+            return self._axis_values.get(axis_name, 0) / 32767.0
 
     # --- SYSTEM METHODS ---
 
@@ -165,13 +193,14 @@ class Input:
                 with self._input_lock:
                     self._axis_values[key_name] = value
 
-                # Map axis to digital triggers for UI/Driving toggles
-                if abs(value) > 10000:
-                    dir_str = "+" if value > 0 else "-"
-                    self._add_input_event(f"{key_name}{dir_str}")
-                elif abs(value) < 5000:
-                    self._remove_input_event(f"{key_name}+")
-                    self._remove_input_event(f"{key_name}-")
+                # Only apply digital threshold to Sticks
+                if key_name in ["DX", "DY", "RX", "RY"]:
+                    if abs(value) > 10000:
+                        dir_str = "+" if value > 0 else "-"
+                        self._add_input_event(f"{key_name}{dir_str}")
+                    elif abs(value) < 5000:
+                        self._remove_input_event(f"{key_name}+")
+                        self._remove_input_event(f"{key_name}-")
         return False
 
     def clear_ui_states(self) -> None:

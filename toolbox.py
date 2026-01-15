@@ -20,6 +20,7 @@ from input import Input
 from scan import ScanManager
 from beacon import BeaconManager
 from connect import ConnectionManager
+from options import OptionsManager
 from ui import UserInterface
 
 from dicts import (
@@ -51,6 +52,7 @@ class DroidToolbox:
         )
         self.beacon_mgr = BeaconManager(self.bt)
         self.conn_mgr = ConnectionManager()
+        self.options_mgr = OptionsManager(self.ui)
 
         # Menu Map
         self.view_map = {
@@ -59,6 +61,7 @@ class DroidToolbox:
             "beacon": (self._render_beacon, self._update_beacon),
             "connect": (self._render_connect, self._update_connect),
             "connected": (self._render_connected, self._update_connected),
+            "options": (self._render_options, self._update_options),
             "audio": (self._render_audio_menu, self._update_audio_menu),
             "script": (self._render_script_menu, self._update_script_menu),
             "remote": (self._render_remote_menu, self._update_remote_menu)
@@ -70,11 +73,13 @@ class DroidToolbox:
         self.beacon_idx = 0
         self.connect_idx = 0
         self.connected_idx = 0
+        self.options_idx = 0
         self.audio_group_idx = 0
         self.audio_clip_idx = 0
         self.script_idx = 0
         
         self.beacon_selection = []
+        self.options_selection = []
         self.audio_group_selected = None
         self.current_view = "main"
         self.submenu = None
@@ -170,6 +175,8 @@ class DroidToolbox:
         elif target == "beacon":
             self.beacon_selection = []
             self.beacon_idx = 0
+        elif target == "exit":
+            self.running = False
 
     def _reset_to_main(self, show_msg: str = None):
         self._reset_bluetooth_adapter()
@@ -244,7 +251,7 @@ class DroidToolbox:
         self.ui.draw_header(UI_STRINGS["MAIN_HEADER"])
         status = self._get_active_status(UI_STRINGS["MAIN_FOOTER"])
         self.ui.draw_status_footer(status)
-        menu_items = [UI_STRINGS["MAIN_SCAN"], UI_STRINGS["MAIN_BEACON"], UI_STRINGS["MAIN_CONNECT"]]
+        menu_items = [UI_STRINGS["MAIN_SCAN"], UI_STRINGS["MAIN_BEACON"], UI_STRINGS["MAIN_CONNECT"], UI_STRINGS["MAIN_OPTIONS"], UI_STRINGS["MAIN_EXIT"]]
         
         self._render_menu_list(menu_items, self.main_idx)
 
@@ -252,13 +259,67 @@ class DroidToolbox:
         self.ui.draw_buttons()
 
     def _update_main(self):
-        self.main_idx = self.input.ui_handle_navigation(self.main_idx, 1, 3)
+        menu_items = [UI_STRINGS["MAIN_SCAN"], UI_STRINGS["MAIN_BEACON"], 
+                          UI_STRINGS["MAIN_CONNECT"], UI_STRINGS["MAIN_OPTIONS"], UI_STRINGS["MAIN_EXIT"]]
+            
+        self.main_idx = self.input.ui_handle_navigation(self.main_idx, 1, len(menu_items))
 
         if self.input.ui_key("A"):
-            views = ["scan", "beacon", "connect"]
+            views = ["scan", "beacon", "connect", "options", "exit"]
             self._change_view(views[self.main_idx])
         elif self.input.ui_key("B"):
             self.running = False
+
+    # ----------------------------------------------------------------------
+    # Options Menu
+    # ----------------------------------------------------------------------
+    def _render_options(self):
+        if not self.options_selection:
+            header = UI_STRINGS["OPTIONS_HEADER"]
+            items = [UI_STRINGS["OPTIONS_THEME"], UI_STRINGS["OPTIONS_FAVORITES"], UI_STRINGS["OPTIONS_MAPPINGS"]]
+        else:
+            category = self.options_selection[0]
+            header = f"--- {category.upper()} ---"
+
+            # Placeholder for submenus
+            if category == UI_STRINGS["OPTIONS_THEME"]:
+                items = ["Not implemented"]
+            elif category == UI_STRINGS["OPTIONS_FAVORITES"]:
+                items = ["Not implemented"]
+            else:
+                items = ["Not implemented"]
+    
+        self.ui.draw_header(header)
+        status = self._get_active_status(UI_STRINGS["MAIN_FOOTER"])
+        self.ui.draw_status_footer(status)
+        
+        self._render_menu_list(items, self.options_idx)
+        self._set_buttons("SELECT", "BACK")
+        self.ui.draw_buttons()
+        self._options_items_cache = items
+
+    def _update_options(self):
+        items = getattr(self, "_options_items_cache", [])
+        if not items: return
+    
+        # Navigation
+        self.options_idx = self.input.ui_handle_navigation(self.options_idx, 1, len(items))
+    
+        # Selection
+        if self.input.ui_key("A"):
+            selected = items[self.options_idx]
+            if not self.options_selection:
+                self.options_selection.append(selected)
+                self.options_idx = 0
+            else:
+                pass # Handle option actions
+    
+        elif self.input.ui_key("B"):
+            if self.options_selection:
+                self.options_selection.pop()
+                self.options_idx = 0
+            else:
+                self._reset_to_main()
 
     # ----------------------------------------------------------------------
     # Scan Menu
@@ -332,7 +393,6 @@ class DroidToolbox:
 
         self.ui.draw_header(header)
         
-        # Apply the helper here
         status_msg = UI_STRINGS["BEACON_FOOTER"].format(status=self.beacon_mgr.current_active)
         status = self._get_active_status(status_msg)
         self.ui.draw_status_footer(status)
@@ -537,7 +597,10 @@ class DroidToolbox:
     # ----------------------------------------------------------------------
     def _render_remote_menu(self):
         self.ui.draw_header(UI_STRINGS["REMOTE_HEADER"])
+        self._draw_controller_telemetry()
         self.ui.draw_status_footer(UI_STRINGS["REMOTE_FOOTER"])
+        
+        self._set_buttons("BACK")
         self.ui.draw_buttons()
 
     def _update_remote_menu(self):
@@ -546,13 +609,49 @@ class DroidToolbox:
     def start(self):
         threading.Thread(target=self._monitor_input, name="InputThread", daemon=True).start()
 
+    def _draw_controller_telemetry(self):
+        self.input.update_smoothing()
+
+        lx = self.input.get_axis_float("DX")
+        ly = self.input.get_axis_float("DY")
+        rx = self.input.get_axis_float("RX")
+        ry = self.input.get_axis_float("RY")
+        l2 = self.input.get_axis_float("L2")
+        r2 = self.input.get_axis_float("R2")
+
+        rad = 50
+        spacing = 120
+        trigger_w, trigger_h = 25, 100
+        trigger_gap = 40
+        
+        total_width = (spacing) + (trigger_w * 2) + trigger_gap
+        
+        start_x = (self.ui.screen_width - total_width) // 2
+        base_y = self.ui.screen_height // 2
+
+        self.ui.draw_joystick_monitor((start_x, base_y), rad, lx, ly, "L")
+        
+        self.ui.draw_joystick_monitor((start_x + spacing, base_y), rad, rx, ry, "R")
+
+        trigger_base_x = start_x + spacing + 80
+        self.ui.draw_trigger_gauge(
+            (trigger_base_x, base_y - (trigger_h // 2)), 
+            (trigger_w, trigger_h), 
+            l2, "L2"
+        )
+        self.ui.draw_trigger_gauge(
+            (trigger_base_x + trigger_gap, base_y - (trigger_h // 2)), 
+            (trigger_w, trigger_h), 
+            r2, "R2"
+        )
+
     def update(self):
-        # 1. Handle Auto-Transition to Connected View
+        # Handle Auto-Transition to Connected View
         if self.conn_mgr.is_connected and self.current_view != "connected" and not self.submenu:
             self.current_view = "connected"
             self.idx = 0
 
-        # 2. Handle Auto-Revert on Connection Loss
+        # Handle Auto-Revert on Connection Loss
         if (self.current_view == "connected" or self.submenu) and not self.conn_mgr.is_connected:
             self._reset_to_main(UI_STRINGS["CONN_LOST"])
 

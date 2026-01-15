@@ -8,9 +8,17 @@ import os
 import sys
 
 # Add dependencies to path
-BASE_PATH = os.path.dirname(os.path.abspath(__file__))
-LIBS_PATH = os.path.join(BASE_PATH, "deps")
-sys.path.insert(0, LIBS_PATH)
+if hasattr(sys, "_MEIPASS"):
+    # Use this for PyInstaller
+    BASE_PATH = sys._MEIPASS
+else:
+    # Use local path for dev
+    BASE_PATH = os.path.dirname(os.path.abspath(__file__))
+
+# Only add local dependencies in dev mode
+DEPS_PATH = os.path.join(BASE_PATH, "deps")
+if not hasattr(sys, "_MEIPASS") and os.path.isdir(DEPS_PATH):
+    sys.path.insert(0, DEPS_PATH)
 
 import sdl2
 
