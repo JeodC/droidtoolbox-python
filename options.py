@@ -28,18 +28,35 @@ class OptionsManager:
     # ----------------------------
     def _load_settings(self):
         with self._lock:
-            if not os.path.exists(self.settings_path) or os.path.getsize(self.settings_path) == 0:
-                self._write_settings()
-                return
             try:
+                if not os.path.exists(self.settings_path) or os.path.getsize(self.settings_path) == 0:
+                    print("[OPTIONS] No settings file found. Creating a new one.")
+                    raise FileNotFoundError()
+
                 with open(self.settings_path, "r") as f:
                     data = json.load(f)
-                    self.favorites = data.get("favorites", {})
-                    self.options_data = data.get("options", self.options_data)
+
+                # Validate top-level structure
+                if not isinstance(data, dict):
+                    raise ValueError("Settings JSON is not a dict")
+
+                self.favorites = data.get("favorites", {})
+                if not isinstance(self.favorites, dict):
+                    print("[OPTIONS] Warning: 'favorites' is not a dict, resetting")
+                    self.favorites = {}
+
+                self.options_data = data.get("options", {"selected_theme": "ARTOO"})
+                if not isinstance(self.options_data, dict):
+                    print("[OPTIONS] Warning: 'options' is not a dict, resetting")
+                    self.options_data = {"selected_theme": "ARTOO"}
+
             except Exception as e:
-                print(f"[OPTIONS] Error loading JSON: {e}")
+                print(f"[OPTIONS] Invalid settings.json: {e}. Resetting to defaults.")
                 self.favorites = {}
-                self.options_data = {"selected_theme": "DEFAULT", "controller_profiles": {}}
+                self.options_data = {"selected_theme": "ARTOO"}
+                self._write_settings()
+                if hasattr(self.ui, "show_progress"):
+                    self.ui.show_progress("Settings reset due to invalid JSON")
 
     def _write_settings(self):
         def _io_task():
@@ -64,6 +81,7 @@ class OptionsManager:
                 "controller_profile": controller_profile_name
             }
             self._write_settings()
+            print(f"[OPTIONS] Saving favorite: {nickname} ({mac}) | Profile: {controller_profile_name}")
 
     def delete_favorite(self, mac):
         mac = mac.upper()
@@ -81,6 +99,12 @@ class OptionsManager:
         """Return favorites as a list of (mac, data) tuples for menus."""
         with self._lock:
             return list(self.favorites.items())
+            
+    def has_favorite(self, mac):
+        """Check if a droid MAC is in the favorites list."""
+        mac = mac.upper()
+        with self._lock:
+            return mac in self.favorites
 
     # ----------------------------
     # Controller Profiles
@@ -88,19 +112,13 @@ class OptionsManager:
     def get_controller_profile(self, mac):
         mac = mac.upper()
         with self._lock:
-            profile_name = self.favorites.get(mac, {}).get("controller_profile", "R_Tank")
-            return CONTROLLER_PROFILES.get(profile_name, CONTROLLER_PROFILES["R_Tank"])
+            return self.favorites.get(mac, {}).get("controller_profile", "R_Arcade")
 
-    def set_controller_profile(self, mac, profile_name):
+    def set_controller_profile(self, mac, profile):
         mac = mac.upper()
-        if profile_name not in CONTROLLER_PROFILES:
-            print(f"[OPTIONS] Unknown controller profile: {profile_name}")
-            return
-
         with self._lock:
             if mac in self.favorites:
-                self.favorites[mac]["controller_profile"] = profile_name
-                self.options_data["controller_profiles"][mac] = profile_name
+                self.favorites[mac]["controller_profile"] = profile
                 self._write_settings()
 
     # ----------------------------

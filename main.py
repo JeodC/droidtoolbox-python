@@ -33,9 +33,9 @@ def initialize_logging() -> None:
     log_dir = os.path.join(BASE_PATH, "logs")
     os.makedirs(log_dir, exist_ok=True)
 
-    # Delete oldest logs if more than 10 exist
+    # Delete oldest logs if more than 3 exist
     log_files = sorted(glob.glob(os.path.join(log_dir, "*.txt")), key=os.path.getmtime)
-    while len(log_files) >= 10:
+    while len(log_files) >= 3:
         os.remove(log_files[0])
         log_files.pop(0)
 
@@ -74,6 +74,13 @@ def main() -> None:
     from toolbox import DroidToolbox
 
     initialize_logging()
+    
+    # Log environment context
+    mode = "Frozen (PyInstaller)" if hasattr(sys, "_MEIPASS") else "Source/Dev"
+    print(f"--- Droid Toolbox Starting ---")
+    print(f"Mode: {mode}")
+    print(f"Base Path: {BASE_PATH}")
+    print(f"Python Version: {sys.version}")
 
     # SDL initialization
     if sdl2.SDL_Init(sdl2.SDL_INIT_VIDEO | sdl2.SDL_INIT_GAMECONTROLLER) < 0:
@@ -96,7 +103,9 @@ def main() -> None:
         print("\nInterrupted by user.")
         cleanup(toolbox, 0)
     except Exception as e:
-        print(f"Unhandled exception: {e}")
+        import traceback
+        print("--- CRASH REPORT ---")
+        traceback.print_exc()
         cleanup(toolbox, 1)
     else:
         print("Exiting Droid Toolbox...")

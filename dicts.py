@@ -111,11 +111,11 @@ COMMANDS = {
     "AUDIO_BASE":      [0x27, 0x42, 0x0F, 0x44, 0x44, 0x00], # Append GG, CC (GrouipID, ClipID)
 
     # --- R-SERIES ---
-    # Direct Motor Control (Command 0x05), used for raw tank-style steering
+    # Direct Motor Control (Command 0x05), used for raw arcade-style steering
     # DM (Direction + Motor) is a single byte:
     # High Nibble (Direction): 0x0=Fwd/Left, 0x8=Rev/Right
     # Low Nibble (Motor ID): 0x0=Left, 0x1=Right, 0x2=Head
-    # Add the Nibbles to get the byte
+    # Merge the Nibbles to get the byte (e.g. Head/Left would be 0x02, Fwd/Right would be 0x01)
     # Speed: 0x60 (min) to 0xFF (max)
     # !! WARNING !! Motors will NOT stop until a specific stop command is sent
     "MOTOR_DIRECT":    [0x27, 0x00, 0x05, 0x44], # Append Direction, Motor, Speed (usually 0xA0), Ramp-up(x2) (usually 0x012C)
@@ -143,38 +143,27 @@ COMMANDS = {
 # - Favorite droids can be assigned a controller profile
 CONTROLLER_PROFILES = {
     # --- R-SERIES ---
-    "R_Tank": {  # Classic tank-style
-        "THROTTLE_L":  {"btn": "LY", "method": "remote_throttle_left"},  # left leg
-        "THROTTLE_R":  {"btn": "RY", "method": "remote_throttle_right"}, # right leg
-        "HEAD":        {"btn": "RX", "method": "remote_head"},            # right stick
-        "SOUND":       {"btn": "A",  "method": "remote_sound_random"},
-        "STOP":        {"btn": "X",  "method": "remote_stop"},
-        "ACCESSORY":   {"btn": "R1", "method": "remote_accessory"},
+    "R_Arcade": {
+        "THROTTLE_L":   {"btn": "DY", "method": "remote_throttle_left"},
+        "THROTTLE_R":   {"btn": "DY", "method": "remote_throttle_right"},
+        "HEAD":         {"btn": "DX", "method": "remote_head"},
+        "SOUND":        {"btn": "A",  "method": "remote_sound_random"},
+        "ACCESSORY":    {"btn": "Y",  "method": "remote_accessory"},
     },
-    "R_Racing": {  # Arcade / racing style
-        "THROTTLE":    {"btn": "LY", "method": "remote_throttle"},       # forward/back + left/right
-        "HEAD":        {"btn": "L2/R2", "method": "remote_head"},        # triggers for head rotation
-        "SOUND":       {"btn": "A",  "method": "remote_sound_random"},
-        "STOP":        {"btn": "X",  "method": "remote_stop"},
-        "ACCESSORY":   {"btn": "R1", "method": "remote_accessory"},
+    "R_Racing": {  
+        "THROTTLE":    {"btn": "R2/L2", "method": "remote_throttle"},
+        "STEER":       {"btn": "DX",    "method": "remote_steer"},
+        "HEAD":        {"btn": "RX",    "method": "remote_head"},
+        "SOUND":       {"btn": "A",     "method": "remote_sound_random"},
+        "ACCESSORY":   {"btn": "Y",     "method": "remote_accessory"},
     },
 
     # --- BB-SERIES ---
-    "BB_Default": {  # Default holonomic control
-        "THROTTLE":    {"btn": "LY", "method": "remote_throttle"},       # forward/back
-        "STEER":       {"btn": "LX", "method": "remote_steer"},          # left/right
-        "HEAD":        {"btn": "RX", "method": "remote_head"},           # head rotation
-        "SOUND":       {"btn": "A",  "method": "remote_sound_random"},
-        "STOP":        {"btn": "X",  "method": "remote_stop"},
-        "ACCESSORY":   {"btn": "R1", "method": "remote_accessory"},
-    },
-    "BB_Alt": {      # Alternative BB layout
-        "THROTTLE":    {"btn": "LY", "method": "remote_throttle"},
-        "STEER":       {"btn": "RX", "method": "remote_steer"},
-        "HEAD":        {"btn": "RY", "method": "remote_head"},
-        "SOUND":       {"btn": "B",  "method": "remote_sound_random"},  # change button mapping
-        "STOP":        {"btn": "X",  "method": "remote_stop"},
-        "ACCESSORY":   {"btn": "R2", "method": "remote_accessory"},
+    "BB_Arcade": {  
+        "THROTTLE":    {"btn": "DY",    "method": "remote_throttle"},
+        "HEAD":        {"btn": "RX",    "method": "remote_head"},
+        "SOUND":       {"btn": "A",     "method": "remote_sound_random"},
+        "ACCESSORY":   {"btn": "Y",     "method": "remote_accessory"},
     }
 }
 
@@ -260,13 +249,15 @@ UI_STRINGS = {
 # BUTTON CONFIGURATIONS
 # See input.py for hardcoded color->button maps
 UI_BUTTONS = {
-    "SELECT": {"label": "Select",   "btn": "A",  "color_ref": "a"},
-    "BACK":   {"label": "Back",     "btn": "B",  "color_ref": "b"},
-    "STOP":   {"label": "Stop",     "btn": "X",  "color_ref": "x"},
-    "DELETE": {"label": "Delete",   "btn": "X",  "color_ref": "x"},
-    "FAV":    {"label": "Favorite", "btn": "Y",  "color_ref": "y"},
-    "EXIT":   {"label": "Exit",     "btn": "B",  "color_ref": "b"},
-    "SCAN":   {"label": "Scan",     "btn": "X",  "color_ref": "x"},
+    "SELECT": {"label": "Select",       "btn": "A",  "color_ref": "a"},
+    "BACK":   {"label": "Back",         "btn": "B",  "color_ref": "b"},
+    "STOP":   {"label": "Stop",         "btn": "X",  "color_ref": "x"},
+    "DELETE": {"label": "Delete",       "btn": "X",  "color_ref": "x"},
+    "FAV":    {"label": "Favorite",     "btn": "Y",  "color_ref": "y"},
+    "EXIT":   {"label": "Exit",         "btn": "B",  "color_ref": "b"},
+    "SCAN":   {"label": "Scan",         "btn": "X",  "color_ref": "x"},
+    "SOUND":  {"label": "Play sound",   "btn": "A",  "color_ref": "a"},
+    "ACC":    {"label": "Accessory",    "btn": "Y",  "color_ref": "y"},
 }
 
 # COLOR THEMES

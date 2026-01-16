@@ -21,6 +21,7 @@ from scan import ScanManager
 from beacon import BeaconManager
 from connect import ConnectionManager
 from options import OptionsManager
+from remote import RemoteControl
 from ui import UserInterface
 
 from dicts import (
@@ -28,6 +29,8 @@ from dicts import (
     LOCATIONS,
     FACTIONS,
     DROIDS,
+    COMMANDS,
+    CONTROLLER_PROFILES,
     AUDIO_GROUPS,
     UI_STRINGS,
     UI_BUTTONS,
@@ -51,15 +54,17 @@ class DroidToolbox:
         )
         self.beacon_mgr = BeaconManager(self.bt)
         self.conn_mgr = ConnectionManager()
+        self.remote = RemoteControl(self.conn_mgr)
+        self.active_profile = None
 
         # Menu Map
         self.view_map = {
             "main": (self._render_main, self._update_main),
+            "options": (self._render_options, self._update_options),
             "scan": (self._render_scan, self._update_scan),
             "beacon": (self._render_beacon, self._update_beacon),
             "connect": (self._render_connect, self._update_connect),
             "connected": (self._render_connected, self._update_connected),
-            "options": (self._render_options, self._update_options),
             "audio": (self._render_audio_menu, self._update_audio_menu),
             "script": (self._render_script_menu, self._update_script_menu),
             "remote": (self._render_remote_menu, self._update_remote_menu)
@@ -164,21 +169,11 @@ class DroidToolbox:
         self.last_progress_time = time.time()
 
     def _render_menu_list(self, items: list, current_idx: int, start_y: int = 60, scroll_limit: int = 12):
-        """
-        Render a vertical list of menu items.
-
-        Supports:
-          - Plain strings
-          - Tuples (mac, data) for favorites
-          - Automatically highlights the selected index
-        """
         if not items:
             return 0
 
-        # Clamp the current index
+        # Clamp the current index and determine scroll window
         current_idx = max(0, min(current_idx, len(items) - 1))
-
-        # Determine scroll window
         start_view = max(0, current_idx - (scroll_limit - 1))
 
         for i, item in enumerate(items[start_view:start_view + scroll_limit]):
@@ -187,17 +182,24 @@ class DroidToolbox:
             y_pos = start_y + i * 30
 
             if isinstance(item, tuple):
-                # Favorite: (mac, data)
                 mac, data = item
                 display_name = data.get("nickname") or data.get("personality") or "Droid"
-                # Controller profile name (from options)
-                profile_name = data.get("controller_profile", "R_Tank")
-                label = f"{display_name} - Controller Profile: {profile_name}"
+                profile_name = data.get("controller_profile", "R_Arcade")
+                label = f"{display_name} - Profile: {profile_name}"
+            
+            elif isinstance(item, dict):
+                mac = item.get("mac", "??:??")
+                identity = item.get("identity", "Unknown")
+                personality = item.get("personality", "")
+                
+                if personality:
+                    label = f"[{personality}] {identity} ({mac[-5:]})"
+                else:
+                    label = f"{identity} ({mac[-5:]})"
+            
             else:
-                # Plain string
                 label = str(item)
 
-            # Draw the row
             self.ui.row_list(
                 label,
                 (20, y_pos),
@@ -256,17 +258,29 @@ class DroidToolbox:
     # Options Menu
     # ----------------------------------------------------------------------
     def _render_options(self):
+        category = None
         if not self.options_selection:
             header = UI_STRINGS["OPTIONS_HEADER"]
-            items = [UI_STRINGS["OPTIONS_THEME"], UI_STRINGS["OPTIONS_FAVORITES"], UI_STRINGS["OPTIONS_MAPPINGS"]]
-            category = None  # define it so the rest of the code can check safely
+            items = [
+                UI_STRINGS["OPTIONS_THEME"],
+                UI_STRINGS["OPTIONS_FAVORITES"],
+                UI_STRINGS["OPTIONS_MAPPINGS"]
+            ]
         else:
             category = self.options_selection[0]
             header = f"--- {category.upper()} ---"
+
             if category == UI_STRINGS["OPTIONS_THEME"]:
                 items = list(UI_THEMES.keys())
-            else:
+            elif category == UI_STRINGS["OPTIONS_FAVORITES"]:
                 items = self.options_mgr.get_favorites_list() or []
+            elif category == UI_STRINGS["OPTIONS_MAPPINGS"]:
+                # Step 1: pick favorite if none selected
+                if not hasattr(self, "_selected_favorite_for_profile") or self._selected_favorite_for_profile is None:
+                    items = self.options_mgr.get_favorites_list() or []
+                else:
+                    # Step 2: list profiles
+                    items = list(CONTROLLER_PROFILES.keys())
 
         self.ui.draw_header(header)
         status = self._get_active_status(UI_STRINGS["MAIN_FOOTER"])
@@ -289,7 +303,7 @@ class DroidToolbox:
         if not items:
             return
 
-        # Navigation
+        category = self.options_selection[0] if self.options_selection else None
         self.options_idx = self.input.ui_handle_navigation(self.options_idx, 1, len(items))
 
         # Selection / actions
@@ -312,8 +326,21 @@ class DroidToolbox:
                     pass
 
                 elif category == UI_STRINGS["OPTIONS_MAPPINGS"]:
-                    # Edit controller profile
-                    pass
+                    if not hasattr(self, "_selected_favorite_for_profile") or self._selected_favorite_for_profile is None:
+                        # Pick favorite
+                        if isinstance(selected, tuple):
+                            mac, _ = selected
+                            self._selected_favorite_for_profile = mac
+                            self.options_idx = 0
+                    else:
+                        # Pick profile
+                        profile_name = selected
+                        mac = self._selected_favorite_for_profile
+                        self.options_mgr.set_controller_profile(mac, profile_name)
+                        self._show_progress(f"Profile '{profile_name}' assigned to favorite")
+                        # Reset back to pick favorite
+                        self._selected_favorite_for_profile = None
+                        self.options_idx = 0
 
         # Delete favorite
         elif self.input.ui_key("X"):
@@ -330,7 +357,11 @@ class DroidToolbox:
 
         # Back
         elif self.input.ui_key("B"):
-            if self.options_selection:
+            if category == UI_STRINGS["OPTIONS_MAPPINGS"] and getattr(self, "_selected_favorite_for_profile", None):
+                # Go back to favorite selection
+                self._selected_favorite_for_profile = None
+                self.options_idx = 0
+            elif self.options_selection:
                 self.options_selection.pop()
                 self.options_idx = 0
             else:
@@ -379,9 +410,15 @@ class DroidToolbox:
                     self.options_mgr.save_favorite(mac, nickname, personality, controller_profile)
                     self._show_progress(UI_STRINGS["FAVORITES_SAVED"])
 
-            elif self.input.ui_key("A"):
-                self.conn_mgr.connect_droid(mac, nickname)
-                self._show_progress(UI_STRINGS["CONN_CONNECTING"].format(name=nickname))
+        elif self.input.ui_key("A"):
+            name = data.get("nickname", "Droid")
+            self._show_progress(UI_STRINGS["CONN_CONNECTING"].format(name=name))
+            # Launch connection in background to prevent UI stutter
+            threading.Thread(
+                target=self.conn_mgr.connect_droid, 
+                args=(mac, name), 
+                daemon=True
+            ).start()
 
         if self.input.ui_key("X"):
             self.scan_mgr.start_scan()
@@ -491,7 +528,9 @@ class DroidToolbox:
         if not fav_items or self.conn_mgr.is_connecting:
             return
 
-        self.connect_idx = min(self.connect_idx, len(fav_items)-1)
+        # Use your standardized navigation handler
+        self.connect_idx = self.input.ui_handle_navigation(self.connect_idx, 1, len(fav_items))
+
         mac, data = fav_items[self.connect_idx]
 
         # Delete favorite
@@ -503,14 +542,14 @@ class DroidToolbox:
 
         # Select favorite
         elif self.input.ui_key("A"):
-            callback = getattr(self, "_connect_select_callback", None)
-            if callback:
-                callback(mac, data)
-            else:
-                # Default behavior: connect
-                self.conn_mgr.connect_droid(mac, data.get("nickname", "Droid"))
-                self._show_progress(UI_STRINGS["CONN_CONNECTING"].format(name=data.get("nickname", "Droid")))
-            return
+            name = data.get("nickname", "Droid")
+            self._show_progress(UI_STRINGS["CONN_CONNECTING"].format(name=name))
+            # Launch connection in background to prevent UI stutter
+            threading.Thread(
+                target=self.conn_mgr.connect_droid, 
+                args=(mac, name), 
+                daemon=True
+            ).start()
 
         # Back
         elif self.input.ui_key("B"):
@@ -549,25 +588,27 @@ class DroidToolbox:
                 self.submenu = choice
 
     def _handle_disconnect(self):
-        if self.conn_mgr.is_connected and self.conn_mgr.conn.loop:
-            fut = asyncio.run_coroutine_threadsafe(self.conn_mgr.conn.disconnect(), self.conn_mgr.conn.loop)
-            
-            def _wait_and_reset():
+        print(f"[CONN] Initiating disconnect from: {self.conn_mgr.active_name}")
+        self.conn_mgr.is_connecting = False
+        
+        if self.conn_mgr.is_connected and self.conn_mgr.conn:
+            def perform_disconnect():
                 try:
-                    fut.result(timeout=5)
-                except Exception:
-                    pass
-                self.conn_mgr.is_connecting = False
-                self.conn_mgr.active_mac = None
-                self.conn_mgr.active_name = None
-                self._reset_to_main(UI_STRINGS["CONN_DISCONNECTED"])
-            
-            threading.Thread(target=_wait_and_reset, daemon=True).start()
-        else:
-            self.conn_mgr.is_connecting = False
-            self.conn_mgr.active_mac = None
-            self.conn_mgr.active_name = None
-            self._reset_to_main(UI_STRINGS["CONN_DISCONNECTED"])
+                    loop = self.conn_mgr.conn.loop
+                    if loop and loop.is_running():
+                        future = asyncio.run_coroutine_threadsafe(
+                            self.conn_mgr.conn.disconnect(), 
+                            loop
+                        )
+                        future.result(timeout=2.0)
+                except Exception as e:
+                    print(f"Disconnect error: {e}")
+
+            threading.Thread(target=perform_disconnect, daemon=True).start()
+
+        self.conn_mgr.active_mac = None
+        self.conn_mgr.active_name = None
+        self._reset_to_main(UI_STRINGS["CONN_DISCONNECTED"])
 
     # ----------------------------------------------------------------------
     # Audio Menu
@@ -580,7 +621,7 @@ class DroidToolbox:
             idx = self.audio_group_idx
             self.ui.draw_status_footer(UI_STRINGS["AUDIO_FOOTER1"])
         else:
-            items = [f"Clip {i}" for i in range(8)]
+            items = [f"Clip {i + 1}" for i in range(8)]
             idx = self.audio_clip_idx
             self.ui.draw_status_footer(UI_STRINGS["AUDIO_FOOTER2"])
 
@@ -624,18 +665,30 @@ class DroidToolbox:
         self.ui.draw_header(UI_STRINGS["REMOTE_HEADER"])
         self._draw_controller_telemetry()
         self.ui.draw_status_footer(UI_STRINGS["REMOTE_FOOTER"])
-        
-        self._set_buttons("BACK")
+        self.active_profile = self.options_mgr.get_controller_profile(self.conn_mgr.active_mac) or "R_Arcade"
+        self._set_buttons("BACK", "SOUND", "ACC")
         self.ui.draw_buttons()
 
     def _update_remote_menu(self):
-        if self.input.ui_key("B"): self.submenu = None
+        if self.input.ui_key("B"):
+            threading.Thread(target=self.conn_mgr.remote_stop, daemon=True).start()
+            self.submenu = None
+            return
 
-    def start(self):
-        threading.Thread(target=self._monitor_input, name="InputThread", daemon=True).start()
+        if not self.active_profile:
+            self.active_profile = self.options_mgr.get_controller_profile(self.conn_mgr.active_mac) or "R_Arcade"
+            print(f"[REMOTE] Active Profile Set: {self.active_profile}")
+
+        try:
+            self.remote.process(self.active_profile, self.input)
+        except Exception as e:
+            print(f"CRITICAL: Remote Logic Crash: {e}")
+            threading.Thread(target=self.conn_mgr.remote_stop, daemon=True).start()
 
     def _draw_controller_telemetry(self):
         self.input.update_smoothing()
+        
+        hints = self.remote.get_hints(self.active_profile)
 
         lx = self.input.get_axis_float("DX")
         ly = self.input.get_axis_float("DY")
@@ -645,30 +698,41 @@ class DroidToolbox:
         r2 = self.input.get_axis_float("R2")
 
         rad = 50
-        spacing = 120
-        trigger_w, trigger_h = 25, 100
-        trigger_gap = 40
-        
-        total_width = (spacing) + (trigger_w * 2) + trigger_gap
-        
-        start_x = (self.ui.screen_width - total_width) // 2
+        spacing = 160
         base_y = self.ui.screen_height // 2
 
-        self.ui.draw_joystick_monitor((start_x, base_y), rad, lx, ly, "L")
-        
-        self.ui.draw_joystick_monitor((start_x + spacing, base_y), rad, rx, ry, "R")
+        has_triggers = any(k in hints for k in ["R2/L2", "L2", "R2", "THROTTLE_L", "THROTTLE_R"])
 
-        trigger_base_x = start_x + spacing + 80
-        self.ui.draw_trigger_gauge(
-            (trigger_base_x, base_y - (trigger_h // 2)), 
-            (trigger_w, trigger_h), 
-            l2, "L2"
-        )
-        self.ui.draw_trigger_gauge(
-            (trigger_base_x + trigger_gap, base_y - (trigger_h // 2)), 
-            (trigger_w, trigger_h), 
-            r2, "R2"
-        )
+        if has_triggers:
+            start_x = (self.ui.screen_width - (spacing + 180)) // 2
+        else:
+            start_x = (self.ui.screen_width - spacing) // 2
+
+        l_hint = f"{hints.get('DX', '')}/{hints.get('DY', '')}".strip("/")
+        self.ui.draw_joystick_monitor((start_x, base_y), rad, lx, ly, l_hint or "L")
+        
+        r_hint = f"{hints.get('RX', '')}/{hints.get('RY', '')}".strip("/")
+        self.ui.draw_joystick_monitor((start_x + spacing, base_y), rad, rx, ry, r_hint or "R")
+
+        if has_triggers:
+            trigger_w, trigger_h = 25, 100
+            trigger_gap = 100
+            trigger_base_x = start_x + spacing + 100
+            t_hint = hints.get("R2/L2", hints.get("L2", "Throttle"))
+            
+            self.ui.draw_trigger_gauge(
+                (trigger_base_x, base_y - (trigger_h // 2)), 
+                (trigger_w, trigger_h), 
+                l2, f"L2: {t_hint}"
+            )
+            self.ui.draw_trigger_gauge(
+                (trigger_base_x + trigger_gap, base_y - (trigger_h // 2)), 
+                (trigger_w, trigger_h), 
+                r2, f"R2: {t_hint}"
+            )
+
+    def start(self):
+        threading.Thread(target=self._monitor_input, name="InputThread", daemon=True).start()
 
     def update(self):
         # Handle Auto-Transition to Connected View
@@ -681,8 +745,11 @@ class DroidToolbox:
             self._reset_to_main(UI_STRINGS["CONN_LOST"])
 
         if self.conn_mgr.last_error:
-            self._show_progress(self.conn_mgr.last_error)
+            # Capture error and clear it immediately
+            err = self.conn_mgr.last_error
             self.conn_mgr.last_error = None
+            self.conn_mgr.is_connecting = False
+            self._show_progress(err)
 
         target = self.submenu if self.submenu else self.current_view
         render, update_func = self.view_map.get(target, (None, None))
@@ -693,7 +760,5 @@ class DroidToolbox:
     def cleanup(self) -> None:
         self.running = False
         self.beacon_mgr.stop()
-        try:
-            self.conn_mgr.disconnect_droid()
-        except RuntimeError:
-            print("Event loop already closed, skipping disconnect")
+        if self.conn_mgr.is_connected:
+            threading.Thread(target=self.conn_mgr.disconnect_droid, daemon=True).start()

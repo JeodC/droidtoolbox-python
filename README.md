@@ -17,6 +17,6 @@ In beacons mode, the bluetooth device will advertise a location of your choosing
 You can connect to droids either from the scan menu or from the connection menu, which is populated with saved droids. After pairing with a droid, you can explore commands like audio playback and scripts.
 
 ## Planned Features
-[ ] Prettify UI with Aurebesh font decorations and theme options (change color schemes)
-[ ] Remotely drive your droid
-[ ] Use an on-screen keyboard to type in names for favorite droids
+[ ] Prettify UI with Aurebesh font decorations and theme options (change color schemes)  
+[ ] Remotely drive your droid  
+[ ] Use an on-screen keyboard to type in names for favorite droids  

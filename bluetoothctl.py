@@ -17,10 +17,14 @@ class BluetoothCtlError(RuntimeError):
 class BluetoothCtl:
     def __init__(self):
         self.proc = None
+        self._cmd_queue = queue.Queue()
         self._queue = queue.Queue(maxsize=500)
         self._stop_event = threading.Event()
-        self.current_mfg_payload = None
         self._start_process()
+        
+        # Start a dedicated thread to write to stdin
+        self._writer_thread = threading.Thread(target=self._writer, daemon=True)
+        self._writer_thread.start()
 
     # ------------------------------------------------------------------
     # Process lifecycle
@@ -78,8 +82,19 @@ class BluetoothCtl:
             return False
 
     # ------------------------------------------------------------------
-    # Reader thread
+    # Read/Write threads
     # ------------------------------------------------------------------
+    def _writer(self):
+        """Dedicated thread to prevent the main app from hanging on stdin.write"""
+        while not self._stop_event.is_set():
+            try:
+                cmd = self._cmd_queue.get(timeout=0.1)
+                if self.proc and self.proc.poll() is None:
+                    self.proc.stdin.write(cmd + "\n")
+                    self.proc.stdin.flush()
+            except (queue.Empty, BrokenPipeError):
+                continue
+
     def _reader(self):
         try:
             fd = self.proc.stdout.fileno()
@@ -106,19 +121,8 @@ class BluetoothCtl:
     # ------------------------------------------------------------------
     # Command sending
     # ------------------------------------------------------------------
-    def _send(self, cmd: str, delay: float = 0.05):
-        try:
-            if self.proc.poll() is not None:
-                print("[BT] Process died. Restarting...")
-                self.proc = None
-                self._start_process()
-                
-            self.proc.stdin.write(cmd + "\n")
-            self.proc.stdin.flush()
-            if delay:
-                time.sleep(delay)
-        except (AttributeError, BrokenPipeError, Exception) as e:
-            raise BluetoothCtlError(f"Command failed: {cmd} - {e}")
+    def _send(self, cmd: str, delay: float = 0.0):
+        self._cmd_queue.put(cmd)
 
     # ------------------------------------------------------------------
     # Public API
@@ -145,6 +149,7 @@ class BluetoothCtl:
     def get_info(self, mac: str, timeout: float = 1.0) -> str:
         mac = mac.upper()
         self._send(f"info {mac}", delay=0.0)
+        print(f"[BT] Fetching info for {mac}...")
     
         end = time.monotonic() + timeout
         output = []
@@ -166,6 +171,9 @@ class BluetoothCtl:
                     time.sleep(0.1)
                     break
                 continue
+                
+        if not found_data:
+            print(f"[BT] Warning: get_info timed out for {mac}")
     
         return "".join(output)
 
@@ -184,6 +192,7 @@ class BluetoothCtl:
         self._send("back")
         self._send("advertise on")
         self.current_mfg_payload = payload
+        print(f"[BT] Updating Advertisement: ID={mfg_id}, Data={mfg_data}")
 
     def stop_advertising(self):
         self._send("advertise off")

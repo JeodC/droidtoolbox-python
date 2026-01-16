@@ -8,7 +8,6 @@ import re
 import subprocess
 import time
 import threading
-from itertools import cycle
 
 from dicts import FACTIONS, DROIDS
 
@@ -18,65 +17,44 @@ from dicts import FACTIONS, DROIDS
 class DroidScanner:
     def __init__(self, bt_controller):
         self.bt = bt_controller
-        self.base_dir = os.path.dirname(os.path.realpath(__file__))
-
-    def _get_raw_devices(self):
-        """Directly queries the OS for visible Bluetooth devices"""
-        return subprocess.run(["bluetoothctl", "devices"], capture_output=True, text=True).stdout
 
     def _parse_personality(self, info_text):
         """Parses hex code to determine the personality and faction of a droid"""
-        if not info_text or "ManufacturerData.Value" not in info_text:
+        if not info_text or "ManufacturerData" not in info_text:
             return None
         try:
-            parts = info_text.split("ManufacturerData.Value:")[1]
-            
-            if "AdvertisingFlags" in parts:
-                parts = parts.split("AdvertisingFlags:")[0]
-            elif "RSSI" in parts:
-                parts = parts.split("RSSI:")[0]
+            if "ManufacturerData.Value" in info_text:
+                parts = info_text.split("ManufacturerData.Value:")[1]
+            else:
+                parts = info_text.split("ManufacturerData Value:")[1]
 
+            parts = re.split(r'AdvertisingFlags|RSSI|TxPower|ServiceData', parts)[0]
             clean_hex = "".join(re.findall(r'[0-9a-fA-F]+', parts)).lower()
 
             if "0304" in clean_hex:
                 start = clean_hex.find("0304")
                 payload = clean_hex[start:start+12]
 
-                if len(payload) == 12:
+                if len(payload) >= 12:
                     raw_aff_byte = int(payload[8:10], 16)
                     raw_pers_val = int(payload[10:12], 16)
                     derived_aff_id = (raw_aff_byte - 0x80) // 2
-
-                    chip_name = "Droid"
-                    faction_label = ""
-
-                    for f_label, droids_dict in DROIDS.items():
-                        if FACTIONS.get(f_label) == derived_aff_id:
-                            faction_label = f_label.capitalize()
-                            for d_info in droids_dict.values():
-                                if d_info["id"] == raw_pers_val:
-                                    chip_name = d_info["name"]
-                                    break
-                            break
                     
-                    if faction_label:
-                        return f"{chip_name} ({faction_label})"
-                    return chip_name
-        except Exception as e:
-            print(f"DEBUG: Parse Error -> {e}")
+                    target_f_key = None
+                    for f_key, f_val in FACTIONS.items():
+                        if f_val == derived_aff_id:
+                            target_f_key = f_key
+                            break
+
+                    if target_f_key:
+                        faction_droids = DROIDS.get(target_f_key, {})
+                        for d_info in faction_droids.values():
+                            if d_info["id"] == raw_pers_val:
+                                return f"{d_info['name']} ({target_f_key})"
+                        return f"Unknown ID:{hex(raw_pers_val)} ({target_f_key})"
             return None
-        return None
-
-    def scan_for_droids(self):
-        """Returns a list of MAC addresses identified as 'DROID'"""
-        raw_output = self._get_raw_devices()
-        return [l.split()[1] for l in raw_output.splitlines() if "DROID" in l.upper()]
-
-    def get_droid_identity(self, mac):
-        """Returns the Faction and Personality name for a given MAC"""
-        info_text = self.bt.get_info(mac)
-        return self._parse_personality(info_text)
-
+        except Exception:
+            return None
 
 # ----------------------------------------------------------------------
 # Scan Manager (High Level)
@@ -89,66 +67,71 @@ class ScanManager:
         self.favorites = favorites or {}
         self.scanning = False
         self.scan_results = []
-        self.last_error = None
         self.progress_callback = progress_callback
 
-    def _update_progress(self, msg):
-        """Triggers the UI callback to update the user on scan status"""
-        if self.progress_callback:
-            self.progress_callback(msg)
-
-    def start_scan(self, duration=2.0):
+    def start_scan(self, duration=3.0):
         """Initiates the background thread to perform a non-blocking device scan"""
         if self.scanning:
             return
-        
         self.scanning = True
-        self.last_error = None
-        threading.Thread(target=self._scan_thread, args=(duration,), daemon=True, name="ScanningThread").start()
-        
+        threading.Thread(target=self._scan_thread, args=(duration,), daemon=True).start()
+
     def stop_scan(self):
         """Signals the Bluetooth controller to cease discovery and updates state"""
-        if self.scanning:
-            try:
-                self.bt.stop_scanning()
-            except Exception:
-                pass
-            self.scanning = False
+        self.scanning = False
 
     def _scan_thread(self, duration):
         try:
-            with self._lock:
-                self.scan_results = []
+            self.bt.power_on()
             
-            self.bt.power_on()  
-            self.bt.start_scanning()
-            time.sleep(duration)
-            self.bt.stop_scanning()
+            # Broad discovery to populate the device list
+            subprocess.run(["bluetoothctl", "scan", "on"], timeout=duration, capture_output=True)
             
-            # Increase this to allow the OS to process the final scan results
-            time.sleep(0.5) 
-
-            found_macs = self.scanner.scan_for_droids()
+            # Get the list of all MACs the OS currently sees
+            raw_devs = subprocess.run(["bluetoothctl", "devices"], capture_output=True, text=True).stdout
+            found_macs = [l.split()[1] for l in raw_devs.splitlines() if "DROID" in l.upper()]
             
+            # Get current favorites to check for existing profiles
+            current_favorites = {}
+            if self.options and hasattr(self.options, "get_favorites_dict"):
+                current_favorites = self.options.get_favorites_dict()
+            
+            temp_results = []
             for mac in found_macs:
                 mac = mac.upper()
                 
-                # Give the info command two chances to find the ManufacturerData
-                identity = self.scanner.get_droid_identity(mac)
-                if not identity:
-                    time.sleep(0.2)
-                    identity = self.scanner.get_droid_identity(mac)
+                # Targeted nudge to refresh attributes
+                subprocess.run(["bluetoothctl", "scan", "on"], timeout=1.5, capture_output=True)
                 
-                nickname = self.favorites.get(mac)
+                info_text = subprocess.run(["bluetoothctl", "info", mac], capture_output=True, text=True).stdout
+                identity = self.scanner._parse_personality(info_text)
                 
-                new_droid = {
-                    "mac": mac, 
-                    "nickname": nickname, 
-                    "identity": identity if identity else "Droid Found"
-                }
+                # --- Profile Hinting Logic ---
+                fav_entry = current_favorites.get(mac)
+                nickname = None
+                profile = "R_Arcade"
 
-                with self._lock:
-                    self.scan_results.append(new_droid)
+                if fav_entry:
+                    nickname = fav_entry.get("nickname")
+                    profile = fav_entry.get("controller_profile", "R_Arcade")
+                else:
+                    # New droid found: Hint profile based on identity string
+                    if identity:
+                        if "BB-Series" in identity:
+                            profile = "BB_Arcade"
+                
+                temp_results.append({
+                    "mac": mac,
+                    "nickname": nickname,
+                    "identity": identity if identity else "Droid Found",
+                    "controller_profile": profile
+                })
+
+            with self._lock:
+                self.scan_results = temp_results
+
+        except Exception as e:
+            print(f"Scan Error: {e}")
         finally:
             self.scanning = False
 
@@ -156,9 +139,8 @@ class ScanManager:
         """Provides a thread-safe copy of the currently discovered droid list"""
         with self._lock:
             return self.scan_results.copy()
-            
+
     def clear_results(self):
         """Resets the result list and error tracking for a new scan session"""
         with self._lock:
             self.scan_results = []
-            self.last_error = None

@@ -5,6 +5,7 @@ connect.py - Performs the logic in droid connections
 
 import asyncio
 import os
+import random
 import re
 import sys
 import threading
@@ -31,26 +32,32 @@ class DroidConnection:
     async def _write(self, data: bytearray) -> bool:
         """Low-level GATT write with safety checks and concurrency locking"""
         if not self.is_connected:
+            print("[BLE-TX] Write failed: Not connected.")
             return False
         async with self.lock:
             try:
                 await self.client.write_gatt_char(self._cmd_uuid, data, response=False)
                 return True
-            except Exception:
+            except Exception as e:
+                print(f"[BLE ERROR] Failed to send: {e}")
                 return False
 
     async def connect(self, mac: str) -> bool:
         """Connects and performs the mandatory LOGON handshake"""
+        print(f"[BLE] Attempting to find device: {mac}")
         device = await BleakScanner.find_device_by_address(mac, timeout=5.0)
         if not device:
+            print(f"[BLE] Device {mac} not found in range.")
             return False
 
         self.client = BleakClient(device, timeout=10.0)
         try:
             await self.client.connect()
+            print(f"[BLE] Connected to {mac}. Sending LOGON handshake...")
             
             # Auth handshake: Needs a few repetitions to guarantee pickup
             for _ in range(3):
+                print(f"[BLE] Sending LOGON attempt {i+1}...")
                 await self._write(bytearray(COMMANDS["LOGON"]))
                 await asyncio.sleep(0.1)
             
@@ -124,23 +131,30 @@ class ConnectionManager:
             
             if not success:
                 self.last_error = f"Failed to connect to {name}"
-                self.is_connecting = False
                 return
 
-            loop.run_forever()
+            # Instead of run_forever, wait until the connection actually drops
+            # This prevents the thread from consuming 100% of a CPU core
+            while self.conn.is_connected:
+                loop.run_until_complete(asyncio.sleep(0.5))
+
         except asyncio.TimeoutError:
             self.last_error = f"Connection to {name} timed out"
         except Exception as e:
             self.last_error = f"Connection Error: {str(e)}"
         finally:
             self.is_connecting = False
-            self.conn.client = None
+            if self.conn.client and self.conn.client.is_connected:
+                loop.run_until_complete(self.conn.disconnect())
+            loop.close()
 
     def run_action(self, label, category):
         """Parses UI button labels and categories to trigger corresponding Bluetooth commands"""
         if not self.is_connected or not self.conn.loop:
+            print(f"[CONN] Action '{label}' ignored: No active loop/connection.")
             return
 
+        print(f"[CONN] Dispatching {category} action: {label}")
         if category == "Audio":
             if self.audio_in_progress:
                 return
@@ -156,14 +170,16 @@ class ConnectionManager:
                 asyncio.run_coroutine_threadsafe(self.conn.run_script(script_id), self.conn.loop)
 
     async def _play_audio(self, group, clip):
-        """Asynchronous wrapper to prevent multiple audio commands from overlapping"""
         try:
             self.audio_in_progress = True
-            group_idx = group         
-            await self.conn.send_audio(group_idx, clip)
+            # The 'await' here allows the motor commands to 
+            # slip in between the group set and the clip play
+            await self.conn.send_audio(group, clip)
         except Exception as e:
             print(f"Audio Task Error: {e}")
         finally:
+            # Short cooldown to prevent command overlapping
+            await asyncio.sleep(0.2)
             self.audio_in_progress = False
 
     def disconnect_droid(self):
@@ -175,3 +191,105 @@ class ConnectionManager:
         self.is_connecting = False
         self.active_mac = None
         self.active_name = None
+
+    def remote_throttle_left(self, speed: float):
+        self._send_motor_direct(0, speed) # Motor 0
+
+    def remote_throttle_right(self, speed: float):
+        self._send_motor_direct(1, speed) # Motor 1
+
+    def _send_motor_direct(self, motor_id, speed):
+        if not self.is_connected:
+            return
+
+        mag = abs(speed)
+        if mag < 0.05:
+            # 27 00 05 44 [MotorID] 00 00 00 00
+            packet = bytearray([0x27, 0x00, 0x05, 0x44, motor_id, 0x00, 0x00, 0x00])
+            asyncio.run_coroutine_threadsafe(self.conn._write(packet), self.conn.loop)
+            return
+
+        # Direction: 0x0 for Fwd, 0x8 for Rev
+        dir_nibble = 0x00 if speed > 0 else 0x80
+        dm_byte = dir_nibble | motor_id
+        
+        # SS = Speed (0x60 to 0xFF)
+        byte_speed = int(0x60 + (mag * (0xFF - 0x60)))
+        
+        # Format: 27 00 05 44 DM SS RR RR (RRRR = Ramp 0x012C)
+        packet = bytearray([0x27, 0x00, 0x05, 0x44, dm_byte, byte_speed, 0x01, 0x2C])
+        asyncio.run_coroutine_threadsafe(self.conn._write(packet), self.conn.loop)
+
+    def bb_drive(self, direction, speed):
+        packet = [0x2B, 0x42, 0x0F, 0x48, 0x44, 0x05]
+        packet.append(direction)
+        packet.append(speed)
+        packet.extend([0x01, 0x90, 0x00, 0x00])
+        asyncio.run_coroutine_threadsafe(self.conn._write(packet), self.conn.loop)
+
+    def bb_rotate(self, direction, speed):
+        packet = [0x2B, 0x42, 0x0F, 0x48, 0x44, 0x04]
+        packet.append(direction)
+        packet.append(speed)
+        packet.extend([0x00, 0x05, 0x00, 0x00])
+        asyncio.run_coroutine_threadsafe(self.conn._write(packet), self.conn.loop)
+
+    def remote_head(self, value: float):
+        if not self.is_connected:
+            return
+
+        mag = abs(value)
+        if mag < 0.05:
+            # 0x02 is Head Motor ID
+            packet = bytearray([0x27, 0x00, 0x05, 0x44, 0x02, 0x00, 0x00, 0x00])
+            asyncio.run_coroutine_threadsafe(self.conn._write(packet), self.conn.loop)
+            return
+
+        # Use Command 0x0F Type 2 for Head (smoother R2 rotation)
+        # Format: 2B 42 0F 48 44 02 XX YY AA AA BB BB
+        # XX: 00=Right, FF=Left | YY: Speed | AA: Ramp | BB: Delay
+        direction = 0x00 if value > 0 else 0xFF
+        byte_speed = int(mag * 0xFF)
+        
+        packet = bytearray([
+            0x2B, 0x42, 0x0F, 0x48, 0x44, 0x02, 
+            direction, byte_speed, 0x00, 0x64, 0x00, 0x01
+        ])
+        asyncio.run_coroutine_threadsafe(self.conn._write(packet), self.conn.loop)
+
+    def remote_sound_random(self):
+        """Play a random sound clip (Groups 1–7, Clips 1–7)"""
+        if not self.is_connected:
+            return
+
+        if self.audio_in_progress:
+            return
+
+        group = random.randint(1, 3)
+        clip = random.randint(1, 3)
+        
+        asyncio.run_coroutine_threadsafe(self._play_audio(group, clip), self.conn.loop)
+        
+    def remote_accessory(self):
+        if not self.is_connected:
+            return
+
+        # Using the Audio Controller command (0x0F) to trigger accessory logic
+        # Command 0x00 CC PP where CC is the command and PP is the parameter
+        # Based on typical droid accessory behavior:
+        # 27 42 0f 44 44 00 [CMD] [PARAM]
+        
+        # We send the "Trigger Accessory" signal. 
+        # If hardware is present, it moves/sounds. If not, the droid ignores it.
+        packet = bytearray([0x27, 0x42, 0x0F, 0x44, 0x44, 0x00, 0x10, 0x08])
+        asyncio.run_coroutine_threadsafe(self.conn._write(packet), self.conn.loop)
+        
+    def remote_stop(self):
+        if not self.is_connected:
+            return
+
+        # 27 00 05 44 [MotorID] 00 00 00 00
+        # Motor IDs: 0 = Left, 1 = Right, 2 = Head
+        for motor_id in [0, 1, 2]:
+            packet = bytearray([0x27, 0x00, 0x05, 0x44, motor_id, 0x00, 0x00, 0x00])
+            asyncio.run_coroutine_threadsafe(self.conn._write(packet), self.conn.loop)
