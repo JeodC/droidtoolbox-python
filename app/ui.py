@@ -6,6 +6,7 @@ ui.py - The User Interface
 import collections
 import ctypes
 import os
+import sys
 import time
 from itertools import cycle
 from typing import List, Optional, Tuple, Any
@@ -16,7 +17,17 @@ import sdl2.sdlimage as img
 
 from dicts import UI_THEMES
 
-FONT_PATH = os.path.join(os.getcwd(), "res", "BatuuanHighGalacticBody.otf")
+def resource_path(*parts):
+    """Return the absolute path to a resource, works for PyInstaller and dev."""
+    if getattr(sys, "_MEIPASS", None):
+        # PyInstaller mode: use the unpacked _MEIPASS folder
+        base = sys._MEIPASS
+    else:
+        # Dev mode: resources are relative to this script
+        base = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, *parts)
+
+FONT_PATH = resource_path( "res", "BatuuanHighGalacticBody.otf")
 FONT_SIZE = 12
 HEADER_HEIGHT = 25
 FOOTER_HEIGHT = 20
@@ -446,7 +457,7 @@ class UserInterface:
     ) -> None:
         sdl2.SDL_SetHint(sdl2.SDL_HINT_RENDER_SCALE_QUALITY, b"2")
 
-        path = os.path.join("res", f"{name}.png")
+        path = resource_path("res", f"{name}.png")
         if not os.path.exists(path):
             return
 

@@ -4,15 +4,30 @@ options.py - Handles application options and settings.json
 """
 
 import os
+import sys
 import threading
 import json
 from dicts import CONTROLLER_PROFILES
+
+def resource_path(*parts):
+    """Return an absolute path to a resource"""
+    if hasattr(sys, "_MEIPASS"):
+        base = os.path.join(
+            os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share")),
+            "droid_toolbox"
+        )
+    else:
+        # Dev mode: resources are relative to source folder
+        base = os.path.dirname(os.path.abspath(__file__))
+
+    os.makedirs(base, exist_ok=True)
+    return os.path.join(base, *parts)
 
 class OptionsManager:
     def __init__(self, ui, settings_path=None):
         self.ui = ui
         self._lock = threading.Lock()
-        self.settings_path = settings_path or os.path.join(os.path.dirname(__file__), "settings.json")
+        self.settings_path = settings_path or resource_path("settings.json")
 
         # Default structure
         self.favorites = {}

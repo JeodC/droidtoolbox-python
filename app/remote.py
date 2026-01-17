@@ -47,7 +47,7 @@ class RemoteControl:
         self._apply_intents(intents, profile_name)
 
     def _apply_intents(self, intents, profile_name):
-        if profile_name.startswith("R_"):
+        if profile_name.startswith("R-"):
             t = intents.get("THROTTLE", 0.0)
             s = intents.get("STEER", 0.0)
             h = intents.get("HEAD", 0.0)
@@ -58,7 +58,7 @@ class RemoteControl:
             self._update_motor("RIGHT", tr - s)
             self._update_motor("HEAD", h)
 
-        elif profile_name.startswith("BB_"):
+        elif profile_name.startswith("BB-"):
             drive = intents.get("THROTTLE", 0.0)
             head = intents.get("HEAD", 0.0)
             self._handle_bb_movement(drive, head)

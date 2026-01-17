@@ -122,6 +122,8 @@ class DroidToolbox:
                 })
 
     def _reset_bluetooth_adapter(self):
+        if self.conn_mgr.is_connecting or self.conn_mgr.is_connected:
+                    return
         self.scan_mgr.stop_scan()
         self.beacon_mgr.stop()
         time.sleep(0.3)
@@ -174,7 +176,6 @@ class DroidToolbox:
         if not items:
             return 0
 
-        # Clamp the current index and determine scroll window
         current_idx = max(0, min(current_idx, len(items) - 1))
         start_view = max(0, current_idx - (scroll_limit - 1))
 
@@ -211,7 +212,8 @@ class DroidToolbox:
                 color=self.ui.c_text if sel else self.ui.c_header_bg
             )
 
-        self.ui.draw_image(self.wireframe)
+        if self.current_view == "main" and self.submenu is None:
+            self.ui.draw_image(self.wireframe)
 
         return start_view
         
@@ -375,7 +377,7 @@ class DroidToolbox:
             self.idx = min(self.idx, len(items) - 1)
             self._render_menu_list(items, self.idx)
 
-        self._set_buttons("CONN", "FAV", "SCAN", "BACK")
+        self._set_buttons("SELECT", "FAV", "SCAN", "BACK")
         self.ui.draw_buttons()
 
     def _update_scan(self):
@@ -504,7 +506,7 @@ class DroidToolbox:
         self.ui.draw_status_footer(status)
 
         # Buttons
-        self._set_buttons("SELECT", "BACK", "DELETE")
+        self._set_buttons("SELECT", "DELETE", "BACK")
         self.ui.draw_buttons()
         self._connect_items_cache = fav_items
         self._connect_select_callback = on_select
@@ -512,12 +514,17 @@ class DroidToolbox:
     def _update_connect(self):
         fav_items = getattr(self, "_connect_items_cache", [])
 
+        # Always allow backing out
+        if self.input.ui_key("B"):
+            self._reset_to_main()
+            return
+
+        # If no favorites or currently connecting, nothing else to do
         if not fav_items or self.conn_mgr.is_connecting:
             return
 
-        # Use your standardized navigation handler
+        # Navigation
         self.connect_idx = self.input.ui_handle_navigation(self.connect_idx, 1, len(fav_items))
-
         mac, data = fav_items[self.connect_idx]
 
         # Delete favorite
@@ -528,19 +535,14 @@ class DroidToolbox:
             return
 
         # Select favorite
-        elif self.input.ui_key("A"):
+        if self.input.ui_key("A"):
             name = data.get("nickname", "Droid")
             self._show_progress(UI_STRINGS["CONN_CONNECTING"].format(name=name))
-            # Launch connection in background to prevent UI stutter
             threading.Thread(
-                target=self.conn_mgr.connect_droid, 
-                args=(mac, name), 
+                target=self.conn_mgr.connect_droid,
+                args=(mac, name),
                 daemon=True
             ).start()
-
-        # Back
-        elif self.input.ui_key("B"):
-            self._reset_to_main()
 
     # ----------------------------------------------------------------------
     # Connected Menu (Connected to Droid)
@@ -653,7 +655,7 @@ class DroidToolbox:
         self._draw_controller_telemetry()
         self.ui.draw_status_footer(UI_STRINGS["REMOTE_FOOTER"])
         self.active_profile = self.options_mgr.get_controller_profile(self.conn_mgr.active_mac) or "R-Arcade"
-        self._set_buttons("BACK", "SOUND", "ACC")
+        self._set_buttons("SOUND", "ACC", "BACK")
         self.ui.draw_buttons()
 
     def _update_remote_menu(self):
@@ -723,21 +725,29 @@ class DroidToolbox:
 
     def update(self):
         # Handle Auto-Transition to Connected View
-        if self.conn_mgr.is_connected and self.current_view != "connected" and not self.submenu:
-            self.current_view = "connected"
-            self.idx = 0
+        if self.conn_mgr.is_connected and not self.conn_mgr.is_connecting:
+            # We check if we are NOT in the connected view yet
+            if self.current_view != "connected":
+                print(f"[UI] Connection confirmed to {self.conn_mgr.active_name}. Switching views.")
+                self.current_view = "connected"
+                self.submenu = None
+                self.idx = 0
+                self.connected_idx = 0
 
         # Handle Auto-Revert on Connection Loss
+        # Only revert if we aren't currently trying to connect
         if (self.current_view == "connected" or self.submenu) and not self.conn_mgr.is_connected:
-            self._reset_to_main(UI_STRINGS["CONN_LOST"])
+            if not self.conn_mgr.is_connecting:
+                self._reset_to_main(UI_STRINGS["CONN_LOST"])
 
+        # Error Handling
         if self.conn_mgr.last_error:
-            # Capture error and clear it immediately
             err = self.conn_mgr.last_error
             self.conn_mgr.last_error = None
             self.conn_mgr.is_connecting = False
             self._show_progress(err)
 
+        # Render Logic
         target = self.submenu if self.submenu else self.current_view
         render, update_func = self.view_map.get(target, (None, None))
 

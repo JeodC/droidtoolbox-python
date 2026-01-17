@@ -146,7 +146,7 @@ CONTROLLER_PROFILES = {
     "R-Arcade": {
         "THROTTLE_L":   {"btn": "DY", "method": "remote_throttle_left"},
         "THROTTLE_R":   {"btn": "DY", "method": "remote_throttle_right"},
-        "HEAD":         {"btn": "DX", "method": "remote_head"},
+        "HEAD":         {"btn": "RX", "method": "remote_head"},
         "SOUND":        {"btn": "A",  "method": "remote_sound_random"},
         "ACCESSORY":    {"btn": "Y",  "method": "remote_accessory"},
     },

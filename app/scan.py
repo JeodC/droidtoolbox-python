@@ -84,29 +84,28 @@ class ScanManager:
         try:
             self.bt.power_on()
             
-            # Broad discovery to populate the device list
-            subprocess.run(["bluetoothctl", "scan", "on"], timeout=duration, capture_output=True)
+            # Use the built-in timeout flag of bluetoothctl if available
+            # This allows the process to exit gracefully rather than being killed
+            subprocess.run(["bluetoothctl", "--timeout", str(int(duration)), "scan", "on"], 
+                           capture_output=True, text=True)
             
-            # Get the list of all MACs the OS currently sees
-            raw_devs = subprocess.run(["bluetoothctl", "devices"], capture_output=True, text=True).stdout
+            raw_devs = subprocess.run(["bluetoothctl", "devices"], 
+                                      capture_output=True, text=True).stdout
             found_macs = [l.split()[1] for l in raw_devs.splitlines() if "DROID" in l.upper()]
             
-            # Get current favorites to check for existing profiles
-            current_favorites = {}
-            if self.options and hasattr(self.options, "get_favorites_dict"):
-                current_favorites = self.options.get_favorites_dict()
-            
+            current_favorites = self.favorites or {}
             temp_results = []
+
             for mac in found_macs:
                 mac = mac.upper()
                 
-                # Targeted nudge to refresh attributes
-                subprocess.run(["bluetoothctl", "scan", "on"], timeout=1.5, capture_output=True)
+                # Instead of restarting scan on, just get the info
+                # If the data is missing, the previous scan duration was likely too short
+                info_text = subprocess.run(["bluetoothctl", "info", mac], 
+                                           capture_output=True, text=True).stdout
                 
-                info_text = subprocess.run(["bluetoothctl", "info", mac], capture_output=True, text=True).stdout
                 identity = self.scanner._parse_personality(info_text)
                 
-                # --- Profile Hinting Logic ---
                 fav_entry = current_favorites.get(mac)
                 nickname = None
                 profile = "R-Arcade"
@@ -115,10 +114,8 @@ class ScanManager:
                     nickname = fav_entry.get("nickname")
                     profile = fav_entry.get("controller_profile", "R-Arcade")
                 else:
-                    # New droid found: Hint profile based on identity string
-                    if identity:
-                        if "BB-Series" in identity:
-                            profile = "BB-Arcade"
+                    if identity and "BB-Series" in identity:
+                        profile = "BB-Arcade"
                 
                 temp_results.append({
                     "mac": mac,

@@ -42,29 +42,28 @@ class DroidConnection:
                 print(f"[BLE ERROR] Failed to send: {e}")
                 return False
 
-    async def connect(self, mac: str) -> bool:
-        """Connects and performs the mandatory LOGON handshake"""
+    async def connect(self, mac: str, on_disconnect=None) -> bool:
         print(f"[BLE] Attempting to find device: {mac}")
         device = await BleakScanner.find_device_by_address(mac, timeout=5.0)
         if not device:
             print(f"[BLE] Device {mac} not found in range.")
             return False
 
-        self.client = BleakClient(device, timeout=10.0)
+        # In Bleak 0.19.x, the callback is passed here
+        self.client = BleakClient(device, timeout=10.0, disconnected_callback=on_disconnect)
+        
         try:
             await self.client.connect()
             print(f"[BLE] Connected to {mac}. Sending LOGON handshake...")
             
-            # Auth handshake: Needs a few repetitions to guarantee pickup
             for _ in range(3):
-                print(f"[BLE] Sending LOGON attempt {i+1}...")
                 await self._write(bytearray(COMMANDS["LOGON"]))
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.2)
             
-            # Success sound (Group 0, Clip 2)
             await self.send_audio(0, 0x02)
             return True
-        except Exception:
+        except Exception as e:
+            print(f"[BLE] Connection failed: {e}")
             self.client = None
             return False
 
@@ -121,27 +120,35 @@ class ConnectionManager:
         threading.Thread(target=self._connect_thread, args=(mac, name), daemon=True).start()
 
     def _connect_thread(self, mac, name):
-        """Thread worker that manages the asyncio event loop required for BLE operations"""
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         self.conn.loop = loop 
         
+        stop_event = asyncio.Event()
+
+        def handle_disconnect(_):
+            print(f"[BLE] {name} disconnected.")
+            loop.call_soon_threadsafe(stop_event.set)
+
+        async def run_connection():
+            try:
+                # Pass the handler into our modified connect method
+                success = await asyncio.wait_for(self.conn.connect(mac, on_disconnect=handle_disconnect), timeout=15.0)
+                self.is_connecting = False
+                
+                if not success:
+                    self.last_error = f"Failed to connect to {name}"
+                    stop_event.set()
+                    return
+
+                await stop_event.wait()
+
+            except Exception as e:
+                self.last_error = f"Connection Error: {str(e)}"
+                stop_event.set()
+
         try:
-            success = loop.run_until_complete(asyncio.wait_for(self.conn.connect(mac), timeout=15.0))
-            
-            if not success:
-                self.last_error = f"Failed to connect to {name}"
-                return
-
-            # Instead of run_forever, wait until the connection actually drops
-            # This prevents the thread from consuming 100% of a CPU core
-            while self.conn.is_connected:
-                loop.run_until_complete(asyncio.sleep(0.5))
-
-        except asyncio.TimeoutError:
-            self.last_error = f"Connection to {name} timed out"
-        except Exception as e:
-            self.last_error = f"Connection Error: {str(e)}"
+            loop.run_until_complete(run_connection())
         finally:
             self.is_connecting = False
             if self.conn.client and self.conn.client.is_connected:

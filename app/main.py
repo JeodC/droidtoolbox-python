@@ -9,8 +9,9 @@ import sys
 
 # Add dependencies to path
 if hasattr(sys, "_MEIPASS"):
-    # Use this for PyInstaller
-    BASE_PATH = sys._MEIPASS
+    # Since pyinstaller unpacks the binary to a readonly tmp folder, use a write dir
+    BASE_PATH = os.path.join(os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share")), "droid_toolbox")
+    os.makedirs(BASE_PATH, exist_ok=True)
 else:
     # Use local path for dev
     BASE_PATH = os.path.dirname(os.path.abspath(__file__))
@@ -34,12 +35,12 @@ def initialize_logging() -> None:
     os.makedirs(log_dir, exist_ok=True)
 
     # Delete oldest logs if more than 3 exist
-    log_files = sorted(glob.glob(os.path.join(log_dir, "*.txt")), key=os.path.getmtime)
+    log_files = sorted(glob.glob(os.path.join(log_dir, "*.log")), key=os.path.getmtime)
     while len(log_files) >= 3:
         os.remove(log_files[0])
         log_files.pop(0)
 
-    log_file = os.environ.get("LOG_FILE", os.path.join(log_dir, "log.txt"))
+    log_file = os.environ.get("LOG_FILE", os.path.join(log_dir, "log.log"))
     try:
         _log_fd = open(log_file, "w", buffering=1)
         sys.stdout = sys.stderr = _log_fd
