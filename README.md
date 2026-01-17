@@ -1,9 +1,6 @@
 # Droid Toolbox (Python)
 This python package is used to control Galaxy's Edge droids with Bluetooth LE. It's a work in progress port of [droid toolbox](https://github.com/ruthsarian/Droid-Toolbox/blob/main/Droid-Toolbox.ino) by Ruthsarian, created to be used by linux handheld devices such as the [Anbernic RG40XXH](https://anbernic.com/products/rg40xx-h).
 
-## Dependencies
-You need bleak and dbus-fast to connect to droids. For convenience they are included in the repository. If you are using muOS you will need the [bltMuos](https://github.com/nvcuong1312/bltMuos/releases) application installed.
-
 <div align="center">
 <img width="640" height="480" alt="droidtoolbox-main" src="https://github.com/user-attachments/assets/b16a2a81-6358-479b-a467-5229dafe0264" />
 </div>
