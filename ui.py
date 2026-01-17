@@ -438,10 +438,15 @@ class UserInterface:
                 pass
         self.texture_cache[path] = texture
 
-    def draw_image(self, port: Any, max_w: int = 260, max_h: int = 400) -> None:
+    def draw_image(
+        self,
+        name: str,
+        max_w: int = 260,
+        max_h: int = 400
+    ) -> None:
         sdl2.SDL_SetHint(sdl2.SDL_HINT_RENDER_SCALE_QUALITY, b"2")
 
-        path = "res/droid1_wireframe.png"
+        path = os.path.join("res", f"{name}.png")
         if not os.path.exists(path):
             return
 
@@ -460,7 +465,9 @@ class UserInterface:
         # Query texture size
         w = ctypes.c_int()
         h = ctypes.c_int()
-        if sdl2.SDL_QueryTexture(texture, None, None, ctypes.byref(w), ctypes.byref(h)) != 0:
+        if sdl2.SDL_QueryTexture(
+            texture, None, None, ctypes.byref(w), ctypes.byref(h)
+        ) != 0:
             return
 
         tex_w, tex_h = w.value, h.value
@@ -477,7 +484,7 @@ class UserInterface:
         # ------------------------------------------------------------
         left_panel_width = self.screen_width // 2
         image_area_x = left_panel_width
-        image_area_y = HEADER_HEIGHT + 80
+        image_area_y = HEADER_HEIGHT + 30
 
         x = image_area_x + (left_panel_width - draw_w) // 2
         y = image_area_y

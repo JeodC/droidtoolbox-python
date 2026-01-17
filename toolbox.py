@@ -5,6 +5,7 @@ toolbox.py - Backend logic manager for navigation and actions
 
 import asyncio
 import os
+import random
 import time
 import threading
 from typing import List
@@ -93,6 +94,7 @@ class DroidToolbox:
         self.PROGRESS_STICKY_SECONDS = 2.0
 
         # Apply theme
+        self.wireframe = f"droid{random.randint(1, 3)}_wireframe"
         current_theme = self.options_mgr.get_theme()
         self.ui.apply_theme(current_theme)
 
@@ -208,8 +210,8 @@ class DroidToolbox:
                 sel,
                 color=self.ui.c_text if sel else self.ui.c_header_bg
             )
-            
-        self.ui.draw_image(None)
+
+        self.ui.draw_image(self.wireframe)
 
         return start_view
         
@@ -265,7 +267,6 @@ class DroidToolbox:
             header = UI_STRINGS["OPTIONS_HEADER"]
             items = [
                 UI_STRINGS["OPTIONS_THEME"],
-                UI_STRINGS["OPTIONS_FAVORITES"],
                 UI_STRINGS["OPTIONS_MAPPINGS"]
             ]
         else:
@@ -274,14 +275,10 @@ class DroidToolbox:
 
             if category == UI_STRINGS["OPTIONS_THEME"]:
                 items = list(UI_THEMES.keys())
-            elif category == UI_STRINGS["OPTIONS_FAVORITES"]:
-                items = self.options_mgr.get_favorites_list() or []
             elif category == UI_STRINGS["OPTIONS_MAPPINGS"]:
-                # Step 1: pick favorite if none selected
                 if not hasattr(self, "_selected_favorite_for_profile") or self._selected_favorite_for_profile is None:
                     items = self.options_mgr.get_favorites_list() or []
                 else:
-                    # Step 2: list profiles
                     items = list(CONTROLLER_PROFILES.keys())
 
         self.ui.draw_header(header)
@@ -289,14 +286,7 @@ class DroidToolbox:
         self.ui.draw_status_footer(status)
         
         self._render_menu_list(items, self.options_idx)
-
-        # Set buttons depending on the category
-        if category == UI_STRINGS["OPTIONS_FAVORITES"]:
-            # Favorites management: Select = edit, X = delete, B = back
-            self._set_buttons("SELECT", "BACK", "DELETE")
-        else:
-            self._set_buttons("SELECT", "BACK")
-        
+        self._set_buttons("SELECT", "BACK")
         self.ui.draw_buttons()
         self._options_items_cache = items
 
@@ -319,13 +309,8 @@ class DroidToolbox:
                 category = self.options_selection[0]
 
                 if category == UI_STRINGS["OPTIONS_THEME"]:
-                    # Switch the current UI theme
                     self.options_mgr.set_theme(selected)
                     self.ui.apply_theme(selected)
-
-                elif category == UI_STRINGS["OPTIONS_FAVORITES"]:
-                    # Edit nickname
-                    pass
 
                 elif category == UI_STRINGS["OPTIONS_MAPPINGS"]:
                     if not hasattr(self, "_selected_favorite_for_profile") or self._selected_favorite_for_profile is None:
