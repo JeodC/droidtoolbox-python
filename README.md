@@ -18,5 +18,5 @@ You can connect to droids either from the scan menu or from the connection menu,
 
 ## Planned Features
 [ ] Prettify UI with Aurebesh font decorations and theme options (change color schemes)  
-[ ] Remotely drive your droid  
+[x] Remotely drive your droid  
 [ ] Use an on-screen keyboard to type in names for favorite droids  
