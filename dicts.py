@@ -143,14 +143,14 @@ COMMANDS = {
 # - Favorite droids can be assigned a controller profile
 CONTROLLER_PROFILES = {
     # --- R-SERIES ---
-    "R_Arcade": {
+    "R-Arcade": {
         "THROTTLE_L":   {"btn": "DY", "method": "remote_throttle_left"},
         "THROTTLE_R":   {"btn": "DY", "method": "remote_throttle_right"},
         "HEAD":         {"btn": "DX", "method": "remote_head"},
         "SOUND":        {"btn": "A",  "method": "remote_sound_random"},
         "ACCESSORY":    {"btn": "Y",  "method": "remote_accessory"},
     },
-    "R_Racing": {  
+    "R-Racing": {  
         "THROTTLE":    {"btn": "R2/L2", "method": "remote_throttle"},
         "STEER":       {"btn": "DX",    "method": "remote_steer"},
         "HEAD":        {"btn": "RX",    "method": "remote_head"},
@@ -159,7 +159,7 @@ CONTROLLER_PROFILES = {
     },
 
     # --- BB-SERIES ---
-    "BB_Arcade": {  
+    "BB-Arcade": {  
         "THROTTLE":    {"btn": "DY",    "method": "remote_throttle"},
         "HEAD":        {"btn": "RX",    "method": "remote_head"},
         "SOUND":       {"btn": "A",     "method": "remote_sound_random"},

@@ -16,7 +16,7 @@ import sdl2.sdlimage as img
 
 from dicts import UI_THEMES
 
-FONT_PATH = os.path.join(os.getcwd(), "fonts", "BatuuanHighGalacticBody.otf")
+FONT_PATH = os.path.join(os.getcwd(), "res", "BatuuanHighGalacticBody.otf")
 FONT_SIZE = 12
 HEADER_HEIGHT = 25
 FOOTER_HEIGHT = 20
@@ -420,6 +420,7 @@ class UserInterface:
             setattr(self, f"c_{key}", sdl2.SDL_Color(*rgba))
         
         self.c_row_sel = self.c_btn_a
+
     # ------------------------------------------------------------------
     # Image loading with LRU cache
     # ------------------------------------------------------------------
@@ -437,60 +438,52 @@ class UserInterface:
                 pass
         self.texture_cache[path] = texture
 
-    def draw_image(self, port: Any, max_w: int = 380, max_h: int = 280) -> None:
+    def draw_image(self, port: Any, max_w: int = 260, max_h: int = 400) -> None:
         sdl2.SDL_SetHint(sdl2.SDL_HINT_RENDER_SCALE_QUALITY, b"2")
 
-        path = getattr(port, "image_path", None)
-        if not path or not os.path.exists(path):
+        path = "res/droid1_wireframe.png"
+        if not os.path.exists(path):
             return
 
         texture = self.texture_cache.get(path)
-        if texture is None:
-            surface = None
-            texture = None
-            try:
-                surface = img.IMG_Load(path.encode())
-                if not surface:
-                    return
-                texture = sdl2.SDL_CreateTextureFromSurface(self.renderer, surface)
-                if not texture:
-                    return
-                self._cache_texture(path, texture)
-            except Exception:
-                try:
-                    if texture:
-                        sdl2.SDL_DestroyTexture(texture)
-                except Exception:
-                    pass
-                return
-            finally:
-                try:
-                    if surface:
-                        sdl2.SDL_FreeSurface(surface)
-                except Exception:
-                    pass
 
-        # Query original size
+        if texture is None:
+            surface = img.IMG_Load(path.encode())
+            if not surface:
+                return
+            texture = sdl2.SDL_CreateTextureFromSurface(self.renderer, surface)
+            sdl2.SDL_FreeSurface(surface)
+            if not texture:
+                return
+            self._cache_texture(path, texture)
+
+        # Query texture size
         w = ctypes.c_int()
         h = ctypes.c_int()
-        sdl2.SDL_QueryTexture(texture, None, None, ctypes.byref(w), ctypes.byref(h))
-        tex_w, tex_h = w.value, h.value
-        if tex_w == 0 or tex_h == 0:
+        if sdl2.SDL_QueryTexture(texture, None, None, ctypes.byref(w), ctypes.byref(h)) != 0:
             return
 
-        # Compute scale while preserving aspect ratio
+        tex_w, tex_h = w.value, h.value
+        if tex_w <= 0 or tex_h <= 0:
+            return
+
+        # Aspect-fit scaling
         scale = min(max_w / tex_w, max_h / tex_h, 1.0)
-        dw, dh = int(tex_w * scale), int(tex_h * scale)
+        draw_w = int(tex_w * scale)
+        draw_h = int(tex_h * scale)
 
-        # Center in the allocated area
-        desc_center_x = self.screen_width * 3 // 4 - 40
-        desc_max_width = self.screen_width // 2
-        desc_left_x = desc_center_x - desc_max_width // 2
-        x = desc_left_x + (max_w - dw) // 2
-        y = 40 + (max_h - dh) // 2
+        # ------------------------------------------------------------
+        # RIGHT-OF-ROW_LIST PLACEMENT
+        # ------------------------------------------------------------
+        left_panel_width = self.screen_width // 2
+        image_area_x = left_panel_width
+        image_area_y = HEADER_HEIGHT + 80
 
-        dst_rect = sdl2.SDL_Rect(x, y, dw, dh)
-        sdl2.SDL_RenderCopyEx(self.renderer, texture, None, dst_rect, 0, None, sdl2.SDL_FLIP_NONE)
+        x = image_area_x + (left_panel_width - draw_w) // 2
+        y = image_area_y
+
+        dst = sdl2.SDL_Rect(x, y, draw_w, draw_h)
+        sdl2.SDL_RenderCopy(self.renderer, texture, None, dst)
         
     def draw_joystick_monitor(self, pos: Tuple[int, int], radius: int, x_val: float, y_val: float, label: str):
         self.draw_rectangle_outline(

@@ -184,8 +184,8 @@ class DroidToolbox:
             if isinstance(item, tuple):
                 mac, data = item
                 display_name = data.get("nickname") or data.get("personality") or "Droid"
-                profile_name = data.get("controller_profile", "R_Arcade")
-                label = f"{display_name} - Profile: {profile_name}"
+                profile_name = data.get("controller_profile", "R-Arcade")
+                label = f"{display_name} :: Profile: {profile_name}"
             
             elif isinstance(item, dict):
                 mac = item.get("mac", "??:??")
@@ -208,6 +208,8 @@ class DroidToolbox:
                 sel,
                 color=self.ui.c_text if sel else self.ui.c_header_bg
             )
+            
+        self.ui.draw_image(None)
 
         return start_view
         
@@ -665,7 +667,7 @@ class DroidToolbox:
         self.ui.draw_header(UI_STRINGS["REMOTE_HEADER"])
         self._draw_controller_telemetry()
         self.ui.draw_status_footer(UI_STRINGS["REMOTE_FOOTER"])
-        self.active_profile = self.options_mgr.get_controller_profile(self.conn_mgr.active_mac) or "R_Arcade"
+        self.active_profile = self.options_mgr.get_controller_profile(self.conn_mgr.active_mac) or "R-Arcade"
         self._set_buttons("BACK", "SOUND", "ACC")
         self.ui.draw_buttons()
 
@@ -676,7 +678,7 @@ class DroidToolbox:
             return
 
         if not self.active_profile:
-            self.active_profile = self.options_mgr.get_controller_profile(self.conn_mgr.active_mac) or "R_Arcade"
+            self.active_profile = self.options_mgr.get_controller_profile(self.conn_mgr.active_mac) or "R-Arcade"
             print(f"[REMOTE] Active Profile Set: {self.active_profile}")
 
         try:

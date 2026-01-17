@@ -72,7 +72,7 @@ class OptionsManager:
     # ----------------------------
     # Favorites Management
     # ----------------------------
-    def save_favorite(self, mac, nickname, personality, controller_profile_name="R_Racing"):
+    def save_favorite(self, mac, nickname, personality, controller_profile_name="R-Racing"):
         mac = mac.upper()
         with self._lock:
             self.favorites[mac] = {
@@ -112,7 +112,7 @@ class OptionsManager:
     def get_controller_profile(self, mac):
         mac = mac.upper()
         with self._lock:
-            return self.favorites.get(mac, {}).get("controller_profile", "R_Arcade")
+            return self.favorites.get(mac, {}).get("controller_profile", "R-Arcade")
 
     def set_controller_profile(self, mac, profile):
         mac = mac.upper()

@@ -109,16 +109,16 @@ class ScanManager:
                 # --- Profile Hinting Logic ---
                 fav_entry = current_favorites.get(mac)
                 nickname = None
-                profile = "R_Arcade"
+                profile = "R-Arcade"
 
                 if fav_entry:
                     nickname = fav_entry.get("nickname")
-                    profile = fav_entry.get("controller_profile", "R_Arcade")
+                    profile = fav_entry.get("controller_profile", "R-Arcade")
                 else:
                     # New droid found: Hint profile based on identity string
                     if identity:
                         if "BB-Series" in identity:
-                            profile = "BB_Arcade"
+                            profile = "BB-Arcade"
                 
                 temp_results.append({
                     "mac": mac,
