@@ -92,9 +92,7 @@ class ScanManager:
             found_macs = [l.split()[1] for l in raw_devs.splitlines() if "DROID" in l.upper()]
             
             # Get current favorites to check for existing profiles
-            current_favorites = {}
-            if self.options and hasattr(self.options, "get_favorites_dict"):
-                current_favorites = self.options.get_favorites_dict()
+            current_favorites = self.favorites or {}
             
             temp_results = []
             for mac in found_macs:
