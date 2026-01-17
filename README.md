@@ -20,3 +20,7 @@ You can connect to droids either from the scan menu or from the connection menu,
 [ ] Prettify UI with Aurebesh font decorations and theme options (change color schemes)  
 [x] Remotely drive your droid  
 [ ] Use an on-screen keyboard to type in names for favorite droids  
+
+## Credits
+Massive thanks to Ruthsarian and their extensive documentation and research on SWGE Droids!
+Fonts originate from [Unfiction.GitHub.IO](https://unfiction.github.io/resources/fonts/GEFonts.html)

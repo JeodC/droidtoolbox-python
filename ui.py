@@ -16,7 +16,7 @@ import sdl2.sdlimage as img
 
 from dicts import UI_THEMES
 
-FONT_PATH = os.path.join(os.getcwd(), "fonts", "romm.ttf")
+FONT_PATH = os.path.join(os.getcwd(), "fonts", "BatuuanHighGalacticBody.otf")
 FONT_SIZE = 12
 HEADER_HEIGHT = 25
 FOOTER_HEIGHT = 20
